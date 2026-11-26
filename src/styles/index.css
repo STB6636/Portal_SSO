@@ -1,0 +1,30 @@
+/* ==========================================================================
+   Portal SSO v2.4.0 — Tailwind CSS v4 Entry + BMA Enterprise Theme
+   Font: Google Font Sarabun (Primary — Locked Q1)
+   Icons: Font Awesome 6 Free 100% (Locked Q1)
+   ========================================================================== */
+@import "tailwindcss";
+@import "@fortawesome/fontawesome-free/css/all.min.css";
+
+/* Class-based Dark Mode (.dark on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* BMA Enterprise Design System Tokens */
+@theme {
+  --color-bma-gold: #C5A059;
+  --color-bma-dark: #00351B;
+  --color-bma-primary: #00744B;
+  --color-bma-light: #00A368;
+  --color-bma-accent: #F2B82E;
+  --font-sans: "Sarabun", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+@import "./bma-theme.css";
+@import "./login.css";

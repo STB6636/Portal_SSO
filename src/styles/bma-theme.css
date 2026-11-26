@@ -1,0 +1,731 @@
+/* ============================================================================
+ * BMA Enterprise Design System V2.5 — Portal SSO v2.4.0 Edition
+ * Adapted faithfully from Ex Project/Checkin-Vite-React-main/src/styles/bma-theme.css
+ * Font: Google Font Sarabun (Primary — Locked Q1)
+ * ============================================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* --- BMA 9-Color Civic Design System --- */
+  --bma-c-primary: #00744B;
+  --bma-c-sec-1: #215A41;
+  --bma-c-sec-2: #66A33A;
+  --bma-c-sec-3: #00C08A;
+  --bma-c-sec-4: #FFB449;
+  --bma-c-sec-5: #F6DE51;
+  --bma-c-sec-6: #0971CE;
+  --bma-c-sec-7: #EB3DA9;
+  --bma-c-sec-8: #480080;
+
+  /* Core BMA Emerald & Gold Tokens */
+  --g0: #072314;
+  --g1: #00744B;
+  --g2: #00C08A;
+  --gold-bma: #F6DE51;
+  --sb1: #00351B;
+  --sb2: #005B2E;
+  --sb3: #007B3E;
+
+  /* Primary Brand & Button Tokens */
+  --bma-primary: #00744B;
+  --bma-primary-hover: #005B2E;
+  --bma-primary-light: #00C08A;
+  --bma-primary-soft: rgba(0, 116, 75, 0.12);
+
+  /* Import Grid Cell Tokens (Portal SSO v2.4.0) */
+  --grid-error-bg: #FEE2E2;
+  --grid-error-ring: #E53935;
+  --grid-error-text: #B91C1C;
+  --grid-warning-bg: #FEF3C7;
+  --grid-warning-ring: #FFB300;
+  --grid-active-ring: #007B3E;
+  --grid-update-badge: #0288D1;
+  --grid-new-badge: #4EBA6F;
+
+  /* Clean Surfaces & Typography Tokens */
+  --bma-canvas: #E7ECE9;
+  --bma-surface-1: #FFFFFF;
+  --bma-surface-2: #F8FAFC;
+  --bma-surface-info: #EBF8F2;
+  --bma-border: #E2E8F0;
+  --bma-text-primary: #1E293B;
+  --bma-text-secondary: #475569;
+  --bma-text-muted: #94A3B8;
+
+  /* Table Header Tokens */
+  --bma-thead-bg: #F1F5F9;
+  --bma-thead-text: #0F172A;
+  --bma-thead-border: #E2E8F0;
+
+  /* Status Badges */
+  --badge-success-bg: rgba(0, 192, 138, 0.15);
+  --badge-success-text: #00744B;
+  --badge-warning-bg: rgba(255, 180, 73, 0.18);
+  --badge-warning-text: #B45309;
+  --badge-danger-bg: rgba(235, 61, 169, 0.15);
+  --badge-danger-text: #BE123C;
+  --badge-indigo-bg: rgba(9, 113, 206, 0.15);
+  --badge-indigo-text: #0971CE;
+  --badge-sky-bg: rgba(2, 132, 199, 0.15);
+  --badge-sky-text: #0284C7;
+
+  --shadow-card: 0 4px 20px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* ============================================================================
+ * Eye-Care Dark Mode
+ * ============================================================================ */
+html.dark {
+  color-scheme: dark;
+
+  --bma-primary: #34D399;
+  --bma-primary-hover: #10B981;
+  --bma-primary-light: #A7F3D0;
+  --bma-primary-soft: rgba(52, 211, 153, 0.16);
+
+  --sb1: #03190E;
+  --sb2: #062D19;
+  --sb3: #0A4526;
+
+  --grid-error-bg: rgba(127, 29, 29, 0.45);
+  --grid-error-ring: #EF4444;
+  --grid-error-text: #FCA5A5;
+  --grid-warning-bg: rgba(120, 53, 15, 0.42);
+  --grid-warning-ring: #F59E0B;
+  --grid-active-ring: #34D399;
+
+  --bma-canvas: #0B132B;
+  --bma-surface-1: #11231B;
+  --bma-surface-2: #183025;
+  --bma-surface-info: rgba(6, 78, 59, 0.4);
+  --bma-border: #244737;
+  --bma-text-primary: #F1F5F9;
+  --bma-text-secondary: #A7F3D0;
+  --bma-text-muted: #759987;
+
+  --bma-thead-bg: #163024;
+  --bma-thead-text: #A7F3D0;
+  --bma-thead-border: #254D3A;
+
+  --badge-success-bg: rgba(74, 222, 128, 0.18);
+  --badge-success-text: #4ADE80;
+  --badge-warning-bg: rgba(252, 211, 77, 0.18);
+  --badge-warning-text: #FCD34D;
+  --badge-danger-bg: rgba(248, 113, 113, 0.18);
+  --badge-danger-text: #F87171;
+  --badge-indigo-bg: rgba(96, 165, 250, 0.18);
+  --badge-indigo-text: #60A5FA;
+  --badge-sky-bg: rgba(56, 189, 248, 0.18);
+  --badge-sky-text: #38BDF8;
+
+  --shadow-card: 0 12px 30px -4px rgba(0, 0, 0, 0.55);
+}
+
+@layer base {
+  * {
+    font-family: 'Sarabun', -apple-system, BlinkMacSystemFont, sans-serif;
+    box-sizing: border-box;
+  }
+
+  body {
+    background-color: var(--bma-canvas, #E7ECE9);
+    color: var(--bma-text-primary, #1E293B);
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    transition: background-color 0.25s ease, color 0.25s ease;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  html.dark body {
+    background-color: #0B132B;
+    color: #F1F5F9;
+  }
+
+  body.bma-modal-open {
+    overflow: hidden !important;
+  }
+}
+
+/* SweetAlert2 above ResponsiveModal z-[9990] */
+.swal2-container {
+  z-index: 99990 !important;
+}
+
+/* ============================================================================
+ * Header, Topbar & Footer
+ * ============================================================================ */
+.bma-header-bar {
+  background-color: #004D26 !important;
+  background-image: linear-gradient(90deg, #00351B 0%, #005B2E 52%, #007B3E 100%) !important;
+  color: #FFFFFF !important;
+  border-bottom: 3px solid #FDD835 !important;
+  box-shadow: 0 4px 20px rgba(0, 53, 27, 0.22);
+}
+
+.bma-footer-bar {
+  background: rgba(255, 255, 255, 0.78) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  color: #475569 !important;
+  border-top: 1px solid rgba(203, 213, 225, 0.8) !important;
+}
+
+html.dark .bma-footer-bar {
+  background: rgba(11, 19, 43, 0.88) !important;
+  color: #94A3B8 !important;
+  border-top: 1px solid rgba(30, 41, 59, 0.8) !important;
+}
+
+/* ============================================================================
+ * Cards & Surfaces
+ * ============================================================================ */
+.bma-card {
+  background-color: var(--bma-surface-1);
+  border: 1px solid var(--bma-border);
+  box-shadow: var(--shadow-card);
+  border-radius: 1rem;
+  transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.2s ease;
+}
+
+.bma-info-box {
+  background-color: var(--bma-surface-info);
+  border: 1px solid var(--bma-border);
+  border-radius: 0.75rem;
+}
+
+.bma-brand-panel {
+  background-color: #004D26 !important;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+    linear-gradient(150deg, var(--sb1) 0%, var(--sb2) 52%, var(--sb3) 100%) !important;
+  background-size: 28px 28px, 28px 28px, 100% 100% !important;
+  position: relative;
+  overflow: hidden;
+  color: #FFFFFF !important;
+}
+
+/* ============================================================================
+ * Toast Notification Popup
+ * ============================================================================ */
+#bmaToastWrapper {
+  position: fixed;
+  z-index: 100000;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 2rem);
+  max-width: 24rem;
+}
+
+@media (min-width: 768px) {
+  #bmaToastWrapper {
+    top: 1.25rem;
+    right: 1.25rem;
+    left: auto;
+    transform: none;
+    width: auto;
+    min-width: 20rem;
+    max-width: 26rem;
+  }
+}
+
+.bma-toast-item {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.15rem;
+  border-radius: 0.9rem;
+  background: linear-gradient(135deg, #00351B 0%, #006834 100%);
+  color: #FFFFFF;
+  border-left: 5px solid #FDD835;
+  box-shadow: 0 14px 28px -6px rgba(0, 35, 18, 0.45);
+  font-size: 0.92rem;
+  font-weight: 700;
+  animation: bmaToastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.bma-toast-item.toast-error {
+  background: linear-gradient(135deg, #881337 0%, #E11D48 100%);
+  border-left-color: #FDA4AF;
+}
+
+.bma-toast-item.toast-warning {
+  background: linear-gradient(135deg, #78350F 0%, #D97706 100%);
+  border-left-color: #FDE047;
+}
+
+.bma-toast-item.toast-info {
+  background: linear-gradient(135deg, #0C4A6E 0%, #0284C7 100%);
+  border-left-color: #7DD3FC;
+}
+
+@keyframes bmaToastSlideIn {
+  from { opacity: 0; transform: translateY(-14px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ============================================================================
+ * Status Tag Filter Chips & Pastel Role Badges
+ * ============================================================================ */
+.status-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.88rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 2px solid var(--bma-border);
+  background-color: var(--bma-surface-1);
+  color: var(--bma-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.18s ease;
+}
+
+.status-tag-chip:hover {
+  transform: translateY(-1px);
+}
+
+.status-tag-chip.active {
+  color: #FFFFFF !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+}
+
+.role-pastel-superadmin {
+  background-color: #FFE4E6 !important;
+  color: #BE123C !important;
+  border: 1px solid #FDA4AF !important;
+}
+html.dark .role-pastel-superadmin {
+  background-color: rgba(244, 63, 94, 0.22) !important;
+  color: #FDA4AF !important;
+  border-color: rgba(253, 164, 175, 0.4) !important;
+}
+
+.role-pastel-admin {
+  background-color: #FEF9C3 !important;
+  color: #A16207 !important;
+  border: 1px solid #FDE047 !important;
+}
+html.dark .role-pastel-admin {
+  background-color: rgba(234, 179, 8, 0.22) !important;
+  color: #FDE047 !important;
+  border-color: rgba(253, 224, 71, 0.4) !important;
+}
+
+.role-pastel-user {
+  background-color: #DCFCE7 !important;
+  color: #15803D !important;
+  border: 1px solid #86EFAC !important;
+}
+html.dark .role-pastel-user {
+  background-color: rgba(34, 197, 94, 0.22) !important;
+  color: #86EFAC !important;
+  border-color: rgba(134, 239, 172, 0.4) !important;
+}
+
+/* ============================================================================
+ * Jewel-Tone Stat Cards
+ * ============================================================================ */
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.15rem;
+  padding: 1.35rem 1.5rem;
+  color: #FFFFFF !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 53, 27, 0.22), 0 4px 10px -2px rgba(0, 0, 0, 0.08);
+  transition: transform 0.22s ease, box-shadow 0.22s ease;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  z-index: 1;
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 32px -6px rgba(0, 53, 27, 0.28);
+}
+
+.stat-card-total {
+  background-image: linear-gradient(135deg, #00351B 0%, #005B2E 52%, #007B3E 100%) !important;
+  border: 1px solid rgba(253, 216, 53, 0.35) !important;
+}
+
+.stat-card .deco-1,
+.stat-card .deco-2 {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.03) 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.stat-card .deco-1 {
+  width: 7.5rem;
+  height: 7.5rem;
+  top: -2.2rem;
+  right: -2.2rem;
+}
+
+.stat-card .deco-2 {
+  width: 5.5rem;
+  height: 5.5rem;
+  bottom: -1.8rem;
+  right: 2.2rem;
+}
+
+.stat-card .stat-content {
+  position: relative;
+  z-index: 2;
+}
+
+.stat-card .stat-icon-box {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+/* ============================================================================
+ * Spreadsheet Staging Grid Visual States (Portal SSO v2.4.0 Section 8.5)
+ * ============================================================================ */
+.import-cell-error {
+  background-color: var(--grid-error-bg) !important;
+  box-shadow: inset 0 0 0 2px var(--grid-error-ring);
+  color: var(--grid-error-text) !important;
+  position: relative;
+}
+
+.import-cell-error::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 8px solid #E53935;
+  border-left: 8px solid transparent;
+  pointer-events: none;
+}
+
+.import-cell-warning {
+  background-color: var(--grid-warning-bg) !important;
+  box-shadow: inset 0 0 0 1px var(--grid-warning-ring);
+}
+
+.import-cell-active {
+  box-shadow: inset 0 0 0 2px var(--grid-active-ring) !important;
+  z-index: 5;
+}
+
+.bma-skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(226, 232, 240, 0.6) 25%, rgba(241, 245, 249, 0.95) 50%, rgba(226, 232, 240, 0.6) 75%);
+  background-size: 200% 100%;
+  animation: bmaShimmer 1.6s infinite linear;
+}
+
+html.dark .bma-skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(30, 41, 59, 0.6) 25%, rgba(51, 65, 85, 0.85) 50%, rgba(30, 41, 59, 0.6) 75%);
+  background-size: 200% 100%;
+}
+
+@keyframes bmaShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ============================================================================
+ * Shared BMA Form & Action Utility Classes (.bma-btn-*, .bma-input, .bma-label)
+ * ============================================================================ */
+.bma-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 0.35rem;
+}
+
+html.dark .bma-label {
+  color: #CBD5E1;
+}
+
+.bma-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid #CBD5E1;
+  background-color: #FFFFFF;
+  color: #0F172A;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  outline: none;
+}
+
+.bma-input:focus {
+  border-color: #00744B;
+  box-shadow: 0 0 0 3px rgba(0, 116, 75, 0.16);
+}
+
+.bma-input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  background-color: #F1F5F9;
+}
+
+html.dark .bma-input {
+  border-color: #334155;
+  background-color: #0F172A;
+  color: #F1F5F9;
+}
+
+html.dark .bma-input:focus {
+  border-color: #00C08A;
+  box-shadow: 0 0 0 3px rgba(0, 192, 138, 0.2);
+}
+
+html.dark .bma-input:disabled {
+  background-color: #1E293B;
+}
+
+.bma-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border-radius: 0.75rem;
+  background: linear-gradient(135deg, #00744B 0%, #00A368 100%);
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 0.8125rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid transparent;
+  box-shadow: 0 4px 12px rgba(0, 116, 75, 0.22);
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bma-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: 0 6px 16px rgba(0, 116, 75, 0.28);
+}
+
+.bma-btn-primary:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.bma-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bma-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border-radius: 0.75rem;
+  background-color: #FFFFFF;
+  color: #334155;
+  font-weight: 700;
+  font-size: 0.8125rem;
+  padding: 0.55rem 0.95rem;
+  border: 1px solid #CBD5E1;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.bma-btn-outline:hover:not(:disabled) {
+  background-color: #F8FAFC;
+  border-color: #94A3B8;
+  color: #0F172A;
+}
+
+.bma-btn-outline:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+html.dark .bma-btn-outline {
+  background-color: #1E293B;
+  color: #E2E8F0;
+  border-color: #334155;
+}
+
+html.dark .bma-btn-outline:hover:not(:disabled) {
+  background-color: #334155;
+  border-color: #475569;
+  color: #FFFFFF;
+}
+
+.btn-sort-arrow {
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 0.45rem;
+  border: 1px solid #CBD5E1;
+  background-color: #FFFFFF;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.btn-sort-arrow:hover:not(:disabled) {
+  border-color: #00744B;
+  color: #00744B;
+  background-color: #ECFDF5;
+}
+
+.btn-sort-arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+html.dark .btn-sort-arrow {
+  background-color: #1E293B;
+  border-color: #334155;
+  color: #CBD5E1;
+}
+
+html.dark .btn-sort-arrow:hover:not(:disabled) {
+  border-color: #00C08A;
+  color: #00C08A;
+  background-color: rgba(0, 192, 138, 0.12);
+}
+
+/* ============================================================================
+ * Smart TV Desktop Launcher (/apps) — BMA Emerald/Gold Light & Eye-Care Dark
+ * ============================================================================ */
+.smarttv-desktop-canvas {
+  background-color: #E7ECE9;
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(0, 116, 75, 0.10), transparent 45%),
+    radial-gradient(circle at 88% 15%, rgba(246, 222, 81, 0.12), transparent 42%);
+}
+
+html.dark .smarttv-desktop-canvas {
+  background-color: #0B132B;
+  background-image:
+    radial-gradient(circle at 15% 10%, rgba(0, 163, 104, 0.14), transparent 45%),
+    radial-gradient(circle at 85% 20%, rgba(246, 222, 81, 0.08), transparent 42%);
+}
+
+.smarttv-hud-bar {
+  background: rgba(255, 255, 255, 0.80);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-color: rgba(203, 213, 225, 0.75);
+}
+
+html.dark .smarttv-hud-bar {
+  background: rgba(11, 19, 43, 0.82);
+  border-color: rgba(30, 41, 59, 0.85);
+}
+
+.smarttv-spotlight-banner {
+  background-color: #00351B;
+  background-image:
+    radial-gradient(circle at 85% 20%, rgba(246, 222, 81, 0.20), transparent 52%),
+    linear-gradient(125deg, #00351B 0%, #005B2E 48%, #00744B 100%);
+}
+
+.smarttv-app-tile {
+  background-color: rgba(255, 255, 255, 0.94);
+  border: 2px solid rgba(203, 213, 225, 0.85);
+  box-shadow: 0 8px 24px -10px rgba(0, 53, 27, 0.14);
+}
+
+html.dark .smarttv-app-tile {
+  background-color: rgba(30, 41, 59, 0.86);
+  border: 2px solid rgba(51, 65, 85, 0.85);
+  box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.55);
+}
+
+.smarttv-app-tile:hover,
+.smarttv-app-tile.smarttv-tile-focused {
+  transform: translateY(-4px) scale(1.02);
+  border-color: #00744B;
+  box-shadow:
+    0 0 0 3px rgba(0, 163, 104, 0.22),
+    0 20px 36px -12px rgba(0, 53, 27, 0.28);
+}
+
+html.dark .smarttv-app-tile:hover,
+html.dark .smarttv-app-tile.smarttv-tile-focused {
+  border-color: #F6DE51;
+  box-shadow:
+    0 0 0 3px rgba(246, 222, 81, 0.25),
+    0 22px 40px -12px rgba(0, 0, 0, 0.72);
+}
+
+/* ============================================================================
+ * Dedicated KP.7 Print Page (/kp7/print/:personnelId) — Exact A4 Print Sheets
+ * ============================================================================ */
+.kp7-print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .kp7-no-print {
+    display: none !important;
+  }
+
+  .kp7-print-only {
+    display: block !important;
+  }
+
+  .kp7-print-sheet {
+    width: 210mm;
+    height: 297mm;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .kp7-print-sheet:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .kp7-print-sheet img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+  }
+}

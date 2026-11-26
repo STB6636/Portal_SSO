@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>Portal SSO — ศูนย์กลางข้อมูลบุคลากรและยืนยันตัวตน | สำนักเทศกิจ กรุงเทพมหานคร</title>
+
+  <!-- Google Fonts: Sarabun (Primary Font — Locked Q1) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
+
+  <!-- Pre-paint Theme Hydration (Zero FOUC) -->
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('portal_sso_theme_mode');
+        if (saved === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (_) {}
+    })();
+  </script>
+
+  <!-- Remote version.json + Hard Cache Purge (Auto-Stamped by .ai_map/vscode_ast_mapper.mjs) -->
+  <!-- Preserves Supabase Auth PKCE keys (sb-*) & portal_sso_* keys so version bumps never force-logout active SSO users -->
+  <script>
+    (function () {
+      var CURRENT_APP_BUILD = '20261126_436301e6';
+      var BUILD_STORAGE_KEY = 'portal_sso_app_build';
+      var RELOAD_GUARD_KEY = 'portal_sso_reloaded_build';
+      var PRESERVE_PREFIXES = ['sb-', 'portal_sso_'];
+      var PRESERVE_EXACT = [BUILD_STORAGE_KEY];
+
+      function shouldPreserveKey(key) {
+        if (PRESERVE_EXACT.indexOf(key) !== -1) return true;
+        for (var i = 0; i < PRESERVE_PREFIXES.length; i++) {
+          if (key.indexOf(PRESERVE_PREFIXES[i]) === 0) return true;
+        }
+        return false;
+      }
+
+      try {
+        var url = new URL(window.location.href);
+        if (url.searchParams.has('_cb')) {
+          url.searchParams.delete('_cb');
+          window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+        }
+      } catch (_) {}
+
+      function performHardCachePurge(targetBuild) {
+        window.__portalPurgeActive = true;
+        window.__portalPurgePromise = (async function () {
+          try {
+            if (sessionStorage.getItem(RELOAD_GUARD_KEY) === targetBuild) return;
+            sessionStorage.setItem(RELOAD_GUARD_KEY, targetBuild);
+
+            Object.keys(localStorage).forEach(function (key) {
+              if (!shouldPreserveKey(key)) {
+                localStorage.removeItem(key);
+              }
+            });
+            localStorage.setItem(BUILD_STORAGE_KEY, targetBuild);
+
+            if ('caches' in window) {
+              var names = await window.caches.keys();
+              await Promise.all(names.map(function (n) { return window.caches.delete(n); }));
+            }
+            if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+              var regs = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(regs.map(function (r) { return r.unregister(); }));
+            }
+            var nextUrl = new URL(window.location.href);
+            nextUrl.searchParams.set('_cb', targetBuild);
+            window.location.replace(nextUrl.toString());
+          } catch (err) {
+            console.warn('[CacheBuster] Hard purge error:', err);
+          } finally {
+            window.__portalPurgeActive = false;
+          }
+        })();
+        return window.__portalPurgePromise;
+      }
+
+      try {
+        var prevBuild = localStorage.getItem(BUILD_STORAGE_KEY);
+        if (prevBuild && prevBuild !== CURRENT_APP_BUILD) {
+          performHardCachePurge(CURRENT_APP_BUILD);
+          return;
+        }
+        if (!prevBuild) {
+          localStorage.setItem(BUILD_STORAGE_KEY, CURRENT_APP_BUILD);
+        }
+      } catch (_) {}
+
+      async function checkRemoteVersion() {
+        try {
+          if (window.location.protocol === 'file:') return;
+          var verUrl = new URL('./version.json?_t=' + Date.now(), window.location.href).href;
+          var res = await fetch(verUrl, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            }
+          });
+          if (!res.ok) return;
+          var data = await res.json();
+          var remoteBuild = data && data.buildId ? String(data.buildId).trim() : '';
+          if (!remoteBuild) return;
+          var localBuild = localStorage.getItem(BUILD_STORAGE_KEY) || CURRENT_APP_BUILD;
+          if (remoteBuild !== localBuild || remoteBuild !== CURRENT_APP_BUILD) {
+            await performHardCachePurge(remoteBuild);
+          }
+        } catch (_) {}
+      }
+
+      checkRemoteVersion();
+      window.addEventListener('pageshow', function (e) { if (e.persisted) checkRemoteVersion(); });
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') checkRemoteVersion();
+      });
+    })();
+  </script>
+</head>
+<body class="bg-[#E7ECE9] dark:bg-[#0B132B] text-slate-800 dark:text-slate-100 antialiased">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portal SSO — Redirecting...</title>
+  <script>
+    (function () {
+      var l = window.location;
+      var segments = l.pathname.split('/').filter(Boolean);
+      var base = segments.length > 0 && l.hostname.endsWith('github.io') ? '/' + segments[0] + '/' : '/';
+      var rest = l.pathname.replace(new RegExp('^' + base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '/');
+      l.replace(base + '#' + rest + l.search);
+    })();
+  </script>
+</head>
+<body>กำลังนำทางกลับสู่ Portal SSO...</body>
+</html>

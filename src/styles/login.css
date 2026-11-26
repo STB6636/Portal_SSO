@@ -1,0 +1,32 @@
+/* BMA Civic 9-Color Vertical Gradient (Auth Pages — Matched to Checkin-Vite-React-main) */
+body.login-vertical-gradient,
+.login-vertical-gradient {
+  background:
+    radial-gradient(ellipse 70% 50% at 85% 10%, rgba(9, 113, 206, 0.32) 0%, transparent 65%),
+    radial-gradient(ellipse 55% 45% at 12% 88%, rgba(235, 61, 169, 0.25) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 85% 82%, rgba(255, 180, 73, 0.28) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 45% at 15% 18%, rgba(72, 0, 128, 0.35) 0%, transparent 65%),
+    linear-gradient(180deg, #132E22 0%, #215A41 18%, #00744B 42%, #00995D 65%, #00C08A 84%, #66A33A 100%) !important;
+  background-color: #00744B !important;
+  min-height: 100dvh !important;
+}
+
+html.dark body.login-vertical-gradient,
+html.dark .login-vertical-gradient {
+  background:
+    radial-gradient(ellipse 70% 50% at 85% 10%, rgba(9, 113, 206, 0.22) 0%, transparent 65%),
+    radial-gradient(ellipse 55% 45% at 12% 88%, rgba(235, 61, 169, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 85% 82%, rgba(255, 180, 73, 0.20) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 45% at 15% 18%, rgba(72, 0, 128, 0.28) 0%, transparent 65%),
+    linear-gradient(180deg, #071911 0%, #122B20 20%, #004D32 45%, #00744B 75%, #00C08A 100%) !important;
+  background-color: #071911 !important;
+  min-height: 100dvh !important;
+}
+
+.login-card-header-gradient {
+  background: linear-gradient(180deg, #1A4D38 0%, #00744B 100%) !important;
+}
+
+html.dark .login-card-header-gradient {
+  background: linear-gradient(180deg, #0F2D21 0%, #005436 100%) !important;
+}

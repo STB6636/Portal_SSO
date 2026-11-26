@@ -1,0 +1,1 @@
+export { setupService } from './authService';

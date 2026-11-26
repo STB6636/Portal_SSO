@@ -1,0 +1,20 @@
+# Supabase CLI Configuration — Portal SSO v2.4.0 (STB-APP)
+# All 5 Edge Functions handle authentication explicitly in code:
+# - portal-setup / portal-auth: public bootstrap/login/reset + authenticated change-credential
+# - portal-admin-users / portal-sso: verify Bearer JWT via admin.auth.getUser() in _shared/auth.ts
+# - portal-api: verify X-Portal-API-Key (SHA-256) + API Scopes + Allowed Origins
+
+[functions.portal-setup]
+verify_jwt = false
+
+[functions.portal-auth]
+verify_jwt = false
+
+[functions.portal-admin-users]
+verify_jwt = false
+
+[functions.portal-sso]
+verify_jwt = false
+
+[functions.portal-api]
+verify_jwt = false
