@@ -31,7 +31,7 @@ export default function ForceChangeCredentialPage() {
         setUser({ ...user, must_change_credential: false });
       }
       showToast('เปลี่ยนรหัสเข้าใช้ใหม่เรียบร้อยแล้ว', 'success');
-      navigate('/apps', { replace: true });
+      navigate('/main-app', { replace: true });
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'เปลี่ยนรหัสเข้าใช้ไม่สำเร็จ', 'error');
     } finally {

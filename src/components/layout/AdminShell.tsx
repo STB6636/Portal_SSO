@@ -16,7 +16,7 @@ import { useSystemUpdateCheck } from '@/hooks/useSystemUpdateCheck';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useUiStore } from '@/stores/useUiStore';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
-import { confirmAction } from '@/lib/swalHelpers';
+import { confirmLogout } from '@/lib/swalHelpers';
 import { formatThaiDateTime, getCurrentYearBeBangkok } from '@/lib/thaiDate';
 import { cleanDisplaySegment } from '@/lib/positionFormatter';
 import { QUERY_KEYS } from '@/lib/queryClient';
@@ -170,7 +170,8 @@ export function AdminShell({ children }: { children?: React.ReactNode }) {
       [
         // กลุ่ม 1: หลัก
         { id: 'dashboard', group: 'หลัก', to: '/dashboard', label: 'แดชบอร์ด', shortLabel: 'แดชบอร์ด', icon: 'fa-chart-line', iconBg: 'bg-emerald-500/15 text-emerald-400', show: isAdminOrAbove, keywords: 'dashboard ภาพรวม สรุป' },
-        { id: 'apps', group: 'หลัก', to: '/apps', label: 'แอปของฉัน', shortLabel: 'แอปของฉัน', icon: 'fa-grip', iconBg: 'bg-teal-500/15 text-teal-400', show: true, keywords: 'apps launcher sso เว็บแอป' },
+        { id: 'apps', group: 'หลัก', to: '/apps', label: 'แอปของฉัน', shortLabel: 'แอปของฉัน', icon: 'fa-grip', iconBg: 'bg-teal-500/15 text-teal-400', show: isAdminOrAbove, keywords: 'apps launcher sso เว็บแอป แอปรวม' },
+        { id: 'main-app', group: 'หลัก', to: '/main-app', label: 'หน้าหลัก MainApp', shortLabel: 'MainApp', icon: 'fa-tv', iconBg: 'bg-emerald-400/15 text-emerald-300', show: true, keywords: 'mainapp main app smart tv หน้าหลัก portal launcher' },
         // กลุ่ม 2: บุคลากรและบัญชี (นำเข้าบุคลากรอยู่เป็นปุ่มภายในหน้าข้อมูลบุคลากร)
         { id: 'personnel', group: 'บุคลากรและบัญชี', to: '/admin/personnel', label: 'ข้อมูลบุคลากร', shortLabel: 'บุคลากร', icon: 'fa-id-card', iconBg: 'bg-emerald-500/15 text-emerald-300', show: isAdminOrAbove, keywords: 'personnel บุคลากร ข้าราชการ นำเข้า csv excel' },
         { id: 'users', group: 'บุคลากรและบัญชี', to: '/admin/users', label: 'บัญชีผู้ใช้งาน', shortLabel: 'บัญชีผู้ใช้', icon: 'fa-users-gear', iconBg: 'bg-purple-500/15 text-purple-400', show: isAdminOrAbove, keywords: 'users บัญชีผู้ใช้ admin scope rbac' },
@@ -245,7 +246,12 @@ export function AdminShell({ children }: { children?: React.ReactNode }) {
   }, [navItems, quickQuery, isAdminOrAbove, isSuperAdmin]);
 
   const handleLogout = async () => {
-    const ok = await confirmAction('ออกจากระบบ', 'คุณต้องการออกจากระบบ Portal SSO ใช่หรือไม่?', 'ออกจากระบบ', 'warning');
+    const ok = await confirmLogout({
+      fullName: user?.full_name,
+      username: user?.username,
+      role: user?.role,
+      bureauName: settings.bureau_name,
+    });
     if (!ok) return;
     await supabase.auth.signOut().catch(() => {});
     clearAuth();
@@ -401,7 +407,12 @@ export function AdminShell({ children }: { children?: React.ReactNode }) {
     </div>
   );
 
-  const mobileBottomItems = navItems.slice(0, 5);
+  const mobileBottomPriorityIds = isAdminOrAbove
+    ? ['dashboard', 'apps', 'personnel', 'users', 'reset-requests']
+    : ['main-app'];
+  const mobileBottomItems = mobileBottomPriorityIds
+    .map((id) => navItems.find((item) => item.id === id))
+    .filter((item): item is NavItemDef => Boolean(item));
 
   return (
     <div className="min-h-screen flex bg-[#E7ECE9] dark:bg-[#0B132B] text-slate-800 dark:text-slate-100">
@@ -431,7 +442,7 @@ export function AdminShell({ children }: { children?: React.ReactNode }) {
               <div className="flex items-center gap-2 text-xs text-slate-400">
                 <button
                   type="button"
-                  onClick={() => navigate(isAdminOrAbove ? '/dashboard' : '/apps')}
+                  onClick={() => navigate(isAdminOrAbove ? '/dashboard' : '/main-app')}
                   className="hover:text-emerald-600 transition"
                   title="หน้าหลัก"
                 >
@@ -658,6 +669,18 @@ export function AdminShell({ children }: { children?: React.ReactNode }) {
                       role="menuitem"
                       onClick={() => {
                         setAvatarOpen(false);
+                        navigate('/main-app');
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-800 flex items-center gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 transition"
+                    >
+                      <i className="fa-solid fa-tv text-emerald-600 dark:text-emerald-400 w-4 text-center" />
+                      <span>กลับหน้าหลัก MainApp</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setAvatarOpen(false);
                         setMyProfileOpen(true);
                       }}
                       className="w-full text-left px-3 py-2 rounded-xl hover:bg-emerald-50 dark:hover:bg-slate-800 flex items-center gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 transition"
@@ -700,7 +723,10 @@ export function AdminShell({ children }: { children?: React.ReactNode }) {
       </div>
 
       {/* Mobile Bottom Nav */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-1 py-1.5 flex items-center justify-around shadow-2xl">
+      <nav
+        aria-label="เมนูลัดหลักบนมือถือ"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-1 py-1.5 flex items-center justify-around shadow-2xl"
+      >
         {mobileBottomItems.map((item) => (
           <NavLink
             key={item.id}

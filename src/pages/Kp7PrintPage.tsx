@@ -191,7 +191,7 @@ export default function Kp7PrintPage() {
     if (window.history.length > 1) {
       navigate(-1);
     } else {
-      navigate('/apps');
+      navigate('/main-app');
     }
   };
 

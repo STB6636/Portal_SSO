@@ -6,8 +6,9 @@ export function MobileShortcutGrid() {
   const { isSuperAdmin, isAdminOrAbove } = useScopedPermissions();
 
   const shortcuts = [
+    { to: '/main-app', label: 'MainApp', icon: 'fa-tv', bg: 'from-[#00351B] to-[#00744B]', show: true },
     { to: '/dashboard', label: 'แดชบอร์ด', icon: 'fa-chart-line', bg: 'from-emerald-500 to-teal-600', show: isAdminOrAbove },
-    { to: '/apps', label: 'แอปของฉัน', icon: 'fa-grip', bg: 'from-[#00351B] to-[#00744B]', show: true },
+    { to: '/apps', label: 'แอปของฉัน', icon: 'fa-grip', bg: 'from-teal-600 to-emerald-700', show: isAdminOrAbove },
     { to: '/admin/personnel', label: 'บุคลากร', icon: 'fa-id-card', bg: 'from-teal-500 to-emerald-600', show: isAdminOrAbove },
     { to: '/admin/users', label: 'บัญชีผู้ใช้', icon: 'fa-users-gear', bg: 'from-purple-600 to-fuchsia-600', show: isAdminOrAbove },
     { to: '/admin/reset-requests', label: 'รีเซ็ตรหัส', icon: 'fa-key', bg: 'from-amber-500 to-orange-600', show: isAdminOrAbove },

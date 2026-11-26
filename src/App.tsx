@@ -6,7 +6,7 @@ import { useAuthStore } from '@/stores/useAuthStore';
 import { ToastContainer } from '@/components/common/ToastContainer';
 import { RouteGuard } from '@/components/auth/RouteGuard';
 import { AdminShell } from '@/components/layout/AdminShell';
-import { AdminMainSkeleton } from '@/components/layout/AdminMainSkeleton';
+import MainAppPage from '@/pages/MainAppPage';
 
 // Lazy-loaded Auth Pages (7 routes)
 const SetupWizardPage = lazy(() => import('@/pages/auth/SetupWizardPage'));
@@ -47,7 +47,18 @@ function RootIndexRedirect() {
   if (systemHasUsers === false) return <Navigate to="/setup" replace />;
   if (!user) return <Navigate to="/login" replace />;
   if (user.must_change_credential) return <Navigate to="/force-change-credential" replace />;
-  return <Navigate to="/apps" replace />;
+  return <Navigate to="/main-app" replace />;
+}
+
+function PortalSplashLoader() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#021910] text-emerald-100 gap-3">
+      <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shadow-lg">
+        <i className="fa-solid fa-shield-halved text-2xl text-[#F6DE51] animate-pulse" />
+      </div>
+      <p className="text-xs font-bold tracking-wide text-emerald-200/90">กำลังเข้าสู่ระบบ Portal SSO...</p>
+    </div>
+  );
 }
 
 function AppRoutes() {
@@ -55,13 +66,7 @@ function AppRoutes() {
 
   return (
     <>
-      <Suspense
-        fallback={
-          <div className="min-h-screen p-6 bg-[#E7ECE9] dark:bg-[#0B132B]">
-            <AdminMainSkeleton />
-          </div>
-        }
-      >
+      <Suspense fallback={<PortalSplashLoader />}>
         <Routes>
           {/* Root smart redirect */}
           <Route path="/" element={<RootIndexRedirect />} />
@@ -84,10 +89,10 @@ function AppRoutes() {
 
           {/* Standalone Full-Screen Protected Routes (Outside AdminShell) */}
           <Route
-            path="/apps"
+            path="/main-app"
             element={
               <RouteGuard>
-                <AppsLauncherPage />
+                <MainAppPage />
               </RouteGuard>
             }
           />
@@ -114,6 +119,14 @@ function AppRoutes() {
               element={
                 <RouteGuard allowedRoles={['SUPERADMIN', 'ADMIN']}>
                   <DashboardPage />
+                </RouteGuard>
+              }
+            />
+            <Route
+              path="/apps"
+              element={
+                <RouteGuard allowedRoles={['SUPERADMIN', 'ADMIN']}>
+                  <AppsLauncherPage />
                 </RouteGuard>
               }
             />

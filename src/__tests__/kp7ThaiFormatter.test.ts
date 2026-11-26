@@ -5,7 +5,9 @@ import {
   calculateRetirementDateIso,
   expandAndPaginateCareerLines,
   formatCurrencyKp7,
+  formatShortNumericDateKp7,
   formatShortPositionType,
+  formatSignatureDateKp7,
   formatThaiDateInWords,
   formatThaiNumberInWords,
   paginateKp7CareerRows,
@@ -222,11 +224,18 @@ describe('kp7ThaiFormatter', () => {
     // Strictly 2 rows from positionHistory ONLY — salaryHistory row (2024-04-01) is NOT merged!
     expect(rows).toHaveLength(2);
     expect(rows[0].effectiveDateIso).toBe('2015-10-01');
+    expect(rows[0].dateLabel).toBe('๐๑/๑๐/๕๘');
     expect(rows[0].salaryLabel).toBe('๑๕,๐๐๐');
     expect(rows[0].allowanceLabel).toBe('');
     expect(rows[1].effectiveDateIso).toBe('2022-10-01');
+    expect(rows[1].dateLabel).toBe('๐๑/๑๐/๖๕');
     expect(rows[1].salaryLabel).toBe('๒๘,๐๐๐');
     expect(rows[1].allowanceLabel).toBe('๓,๕๐๐');
+
+    // Arabic numeral mode for Item 14 short numeric dates (C2 Option A)
+    const rowsArabic = buildKp7CareerRows(SAMPLE_PERSON, timelines, EMPTY_MASTER_DATA, false);
+    expect(rowsArabic[0].dateLabel).toBe('01/10/58');
+    expect(rowsArabic[1].dateLabel).toBe('01/10/65');
 
     // Empty positionHistory -> returns [] by default (C3-A), or 1 row when allowCurrentPositionFallback = true
     expect(buildKp7CareerRows(SAMPLE_PERSON, EMPTY_TIMELINES, EMPTY_MASTER_DATA, true)).toHaveLength(0);
@@ -248,5 +257,71 @@ describe('kp7ThaiFormatter', () => {
 
     const visualPages = expandAndPaginateCareerLines(many, 15);
     expect(visualPages).toHaveLength(2);
+  });
+
+  it('formats Item 14 short numeric dates dd/mm/yy with Thai/Arabic toggle and BE century rollover (W4)', () => {
+    expect(formatShortNumericDateKp7('2026-02-01', false)).toBe('01/02/69');
+    expect(formatShortNumericDateKp7('2026-02-01', true)).toBe('๐๑/๐๒/๖๙');
+    // BE 2600 (CE 2057) -> last 2 digits must zero-pad to '00'
+    expect(formatShortNumericDateKp7('2057-01-01', false)).toBe('01/01/00');
+    expect(formatShortNumericDateKp7('2057-01-01', true)).toBe('๐๑/๐๑/๐๐');
+    expect(formatShortNumericDateKp7(null, true)).toBe('');
+    expect(formatShortNumericDateKp7('invalid', false)).toBe('');
+  });
+
+  it('formats Page 1 bottom signature dates without slashes and respects Thai numeral toggle (W4 C2-A)', () => {
+    const thaiSig = formatSignatureDateKp7('2026-11-01', true);
+    expect(thaiSig).toBe('๑ พ.ย. ๒๕๖๙');
+    expect(thaiSig).not.toContain('/');
+
+    const arabicSig = formatSignatureDateKp7('2026-11-01', false);
+    expect(arabicSig).toBe('1 พ.ย. 2569');
+    expect(arabicSig).not.toContain('/');
+
+    const blankSig = formatSignatureDateKp7(null, true);
+    expect(blankSig).not.toContain('/');
+    expect(blankSig.length).toBeGreaterThan(0);
+  });
+
+  it('wraps ALL 8 Item 14 columns via wrapHelper without forcing premature level splits (W4)', () => {
+    const sampleRow = {
+      effectiveDateIso: '2026-02-01',
+      dateLabel: '๐๑/๐๒/๖๙',
+      positionLabel: 'นักจัดการงานทั่วไปชำนาญการพิเศษ',
+      positionLines: ['นักจัดการงานทั่วไปชำนาญการพิเศษ'],
+      positionNumber: 'สตบ.๑๒๓๔๕',
+      positionTypeLabel: 'วิชาการ',
+      positionLevelLabel: 'ชำนาญการพิเศษ',
+      levelLines: ['ชำนาญการพิเศษ'],
+      salaryLabel: '๕๕,๐๐๐',
+      allowanceLabel: '๕,๖๐๐',
+      orderRef: 'คำสั่ง สนท. ที่ ๑๒๓/๒๕๖๙ ลว. ๑ ก.พ. ๖๙',
+      orderRefLines: ['คำสั่ง สนท. ที่ ๑๒๓/๒๕๖๙ ลว. ๑ ก.พ. ๖๙'],
+    };
+
+    const calledCols = new Set<string>();
+    const pages = expandAndPaginateCareerLines([sampleRow], 20, (text, col) => {
+      calledCols.add(col);
+      if (col === 'orderRef') return ['คำสั่ง สนท. ที่ ๑๒๓/๒๕๖๙', 'ลว. ๑ ก.พ. ๖๙'];
+      if (col === 'posNo') return ['สตบ.', '๑๒๓๔๕'];
+      // Simulate widened level column fitting on 1 line cleanly
+      return text ? [text] : [''];
+    });
+
+    expect(calledCols).toEqual(
+      new Set(['date', 'position', 'posNo', 'posType', 'level', 'salary', 'allowance', 'orderRef'])
+    );
+    expect(pages).toHaveLength(1);
+    expect(pages[0]).toHaveLength(2);
+    // Level column stayed on 1 single line (no forced splitLongLevelName break when wrapHelper is provided)
+    expect(pages[0][0].levelLine).toBe('ชำนาญการพิเศษ');
+    expect(pages[0][1].levelLine).toBe('');
+    // Wrapped posNo & orderRef spanned across lines 0 and 1 cleanly
+    expect(pages[0][0].positionNumber).toBe('สตบ.');
+    expect(pages[0][1].positionNumber).toBe('๑๒๓๔๕');
+    expect(pages[0][0].orderRefLine).toBe('คำสั่ง สนท. ที่ ๑๒๓/๒๕๖๙');
+    expect(pages[0][1].orderRefLine).toBe('ลว. ๑ ก.พ. ๖๙');
+    expect(pages[0][0].isEntryStart).toBe(true);
+    expect(pages[0][1].isEntryStart).toBe(false);
   });
 });

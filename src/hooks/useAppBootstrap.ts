@@ -49,9 +49,21 @@ export function useAppBootstrap() {
         return;
       }
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        const currentState = useAuthStore.getState();
+        // Skip duplicate hydration when LoginPage already hydrated the exact same user session
+        if (event === 'SIGNED_IN' && currentState.initialized && currentState.user?.id === session.user.id) {
+          void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.masterData });
+          void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.publicSettings });
+          return;
+        }
         const profile = await authService.getMyProfile().catch(() => null);
         if (active) {
-          setUser(profile);
+          // Never clobber an authenticated user with null on transient TOKEN_REFRESHED failures
+          if (profile) {
+            setUser(profile);
+          } else if (!currentState.user) {
+            setUser(null);
+          }
           void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.masterData });
           void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.publicSettings });
         }

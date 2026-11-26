@@ -39,7 +39,7 @@ export function RouteGuard({
   }
 
   if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    return <Navigate to={user.role === 'USER' ? '/apps' : '/dashboard'} replace />;
+    return <Navigate to={user.role === 'USER' ? '/main-app' : '/dashboard'} replace />;
   }
 
   return <>{children}</>;

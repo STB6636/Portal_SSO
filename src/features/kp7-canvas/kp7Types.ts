@@ -32,6 +32,16 @@ export interface Kp7RenderOptions {
   settings?: PublicSystemSettings;
 }
 
+export type Kp7CareerWrapCol =
+  | 'date'
+  | 'position'
+  | 'posNo'
+  | 'posType'
+  | 'level'
+  | 'salary'
+  | 'allowance'
+  | 'orderRef';
+
 export interface Kp7CareerTableRow {
   effectiveDateIso: string;
   dateLabel: string;

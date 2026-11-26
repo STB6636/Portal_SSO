@@ -6,7 +6,7 @@ import {
   buildKp7Item1NameFields,
   calculateRetirementDateIso,
   expandAndPaginateCareerLines,
-  formatSlashDateKp7,
+  formatSignatureDateKp7,
   formatThaiDateInWords,
   formatThaiShortDateKp7,
   formatThaiYearBeOnly,
@@ -15,6 +15,7 @@ import {
 } from './kp7ThaiFormatter';
 import type {
   Kp7CareerTableRow,
+  Kp7CareerWrapCol,
   Kp7DataBundle,
   Kp7RenderOptions,
   Kp7VisualCareerLine,
@@ -35,17 +36,34 @@ const ML = 140;
 const MR = 140;
 const W = KP7_A4_WIDTH - ML - MR; // 2200 px
 
-// Page 2+ 8-column official widths (sum = 2200 px)
-const P2_COLS = [
-  { key: 'date', label: ['วัน เดือน ปี'], width: 230, align: 'center' as const },
-  { key: 'position', label: ['ตำแหน่ง'], width: 640, align: 'left' as const },
-  { key: 'posNo', label: ['เลขที่', 'ตำแหน่ง'], width: 175, align: 'center' as const },
-  { key: 'posType', label: ['ตำแหน่ง', 'ประเภท'], width: 185, align: 'center' as const },
-  { key: 'level', label: ['ระดับ'], width: 205, align: 'center' as const },
-  { key: 'salary', label: ['เงินเดือน'], width: 195, align: 'right' as const },
-  { key: 'allowance', label: ['เงินประจำ', 'ตำแหน่ง'], width: 195, align: 'right' as const },
-  { key: 'orderRef', label: ['เอกสารอ้างอิง'], width: 375, align: 'left' as const },
-] as const;
+// W4.3 Rebalanced Page 2+ 8-column official widths (sum = 2200 px exactly!)
+// Expanded Cols 3, 4, 5, 6, 7 (+50, +30, +40, +30, +30) & Col 8 (+10)
+const P2_COLS: ReadonlyArray<{
+  key: Kp7CareerWrapCol;
+  label: string[];
+  width: number;
+  align: CanvasTextAlign;
+}> = [
+  { key: 'date', label: ['วัน เดือน ปี'], width: 195, align: 'center' },
+  { key: 'position', label: ['ตำแหน่ง'], width: 485, align: 'left' },
+  { key: 'posNo', label: ['เลขที่', 'ตำแหน่ง'], width: 225, align: 'center' },
+  { key: 'posType', label: ['ตำแหน่ง', 'ประเภท'], width: 215, align: 'center' },
+  { key: 'level', label: ['ระดับ'], width: 245, align: 'center' },
+  { key: 'salary', label: ['เงินเดือน'], width: 225, align: 'right' },
+  { key: 'allowance', label: ['เงินประจำ', 'ตำแหน่ง'], width: 225, align: 'right' },
+  { key: 'orderRef', label: ['เอกสารอ้างอิง'], width: 385, align: 'left' },
+];
+
+const P2_COL_WIDTH_MAP: Record<Kp7CareerWrapCol, number> = {
+  date: 195,
+  position: 485,
+  posNo: 225,
+  posType: 215,
+  level: 245,
+  salary: 225,
+  allowance: 225,
+  orderRef: 385,
+};
 
 let cachedSegmenter: { segment: (s: string) => Iterable<{ segment: string }> } | null | undefined;
 function getThaiSegmenter() {
@@ -68,8 +86,8 @@ export async function ensureSarabunFontLoaded(): Promise<void> {
   if (typeof document === 'undefined' || !('fonts' in document)) return;
   try {
     await Promise.all([
-      document.fonts.load(`400 46px ${FONT_FAMILY}`),
-      document.fonts.load(`700 46px ${FONT_FAMILY}`),
+      document.fonts.load(`400 44px ${FONT_FAMILY}`),
+      document.fonts.load(`700 44px ${FONT_FAMILY}`),
     ]);
     await document.fonts.ready;
   } catch {
@@ -101,11 +119,6 @@ function loadImageElement(src: string, crossOrigin?: string): Promise<HTMLImageE
   });
 }
 
-/**
- * Loads owner signature image CORS-safely so canvas.toDataURL() NEVER throws SecurityError:
- *  1. If settings + Google Drive URL: fetch Base64 Data URL via GAS `?action=getBase64` first!
- *  2. Fallback: crossOrigin="anonymous" direct image load.
- */
 async function loadSignatureForCanvas(
   rawUrl: string | null | undefined,
   options: Kp7RenderOptions
@@ -117,7 +130,6 @@ async function loadSignatureForCanvas(
     return loadImageElement(cleanUrl);
   }
 
-  // Tier 1: GAS getBase64 proxy (zero-CORS, works even on restricted Workspace Drives)
   if (options.settings?.google_drive_script_url) {
     const dataUrl = await fetchDriveImageAsDataUrl({
       fileUrlOrId: cleanUrl,
@@ -130,7 +142,6 @@ async function loadSignatureForCanvas(
     }
   }
 
-  // Tier 2: Direct CORS anonymous load
   return loadImageElement(cleanUrl, 'anonymous');
 }
 
@@ -151,12 +162,13 @@ function tokenizeThai(text: string): string[] {
 }
 
 /**
- * Word-aware Thai text wrapper that gracefully breaks extra-long unspaced tokens by grapheme.
+ * Thai-word-aware text wrapper. Never shrinks font size; wraps long words cleanly to next line.
  */
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const raw = String(text ?? '').trim();
   if (!raw) return [];
-  if (ctx.measureText(raw).width <= maxWidth) return [raw];
+  const safeMax = Math.max(24, maxWidth);
+  if (ctx.measureText(raw).width <= safeMax) return [raw];
 
   const paragraphs = raw.split(/\r?\n/);
   const lines: string[] = [];
@@ -167,7 +179,7 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 
     for (const token of tokens) {
       const candidate = current ? current + token : token.trimStart();
-      if (ctx.measureText(candidate).width <= maxWidth) {
+      if (ctx.measureText(candidate).width <= safeMax) {
         current = candidate;
         continue;
       }
@@ -179,13 +191,13 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 
       const trimmedTok = token.trimStart();
       if (!trimmedTok) continue;
-      if (ctx.measureText(trimmedTok).width <= maxWidth) {
+      if (ctx.measureText(trimmedTok).width <= safeMax) {
         current = trimmedTok;
       } else {
-        // Hard character-level split only if a single token exceeds column width
+        // Hard grapheme-level wrap only if a single unspaced token exceeds column width
         let chunk = '';
         for (const ch of Array.from(trimmedTok)) {
-          if (ctx.measureText(chunk + ch).width <= maxWidth) {
+          if (ctx.measureText(chunk + ch).width <= safeMax) {
             chunk += ch;
           } else {
             if (chunk) lines.push(chunk);
@@ -203,72 +215,49 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 }
 
 /**
- * Draws single-line text with automatic font-size shrink when needed to fit `maxWidth` cleanly.
+ * W4.4: Fixed-size text drawing WITHOUT font shrinking and WITHOUT ctx.fillText 4th-arg horizontal squishing.
  */
-function drawFittedText(
+function drawFixedText(
   ctx: CanvasRenderingContext2D,
   text: string,
   x: number,
   y: number,
-  maxWidth: number,
-  baseSize: number,
+  fontSize: number,
   weight: '400' | '700' = '400',
   align: CanvasTextAlign = 'left',
-  minSize = 28
+  baseline: CanvasTextBaseline = 'middle'
 ) {
   const str = String(text ?? '').trim();
   if (!str) return;
-  let size = baseSize;
-  setFont(ctx, size, weight);
-  while (size > minSize && ctx.measureText(str).width > maxWidth) {
-    size -= 2;
-    setFont(ctx, size, weight);
-  }
+  setFont(ctx, fontSize, weight);
   ctx.fillStyle = INK;
   ctx.textAlign = align;
-  ctx.textBaseline = 'middle';
-  if (ctx.measureText(str).width > maxWidth) {
-    ctx.fillText(str, x, y, maxWidth);
-  } else {
-    ctx.fillText(str, x, y);
-  }
+  ctx.textBaseline = baseline;
+  ctx.fillText(str, x, y);
 }
 
 /**
- * Draws wrapped multi-line text inside a bounding cell, auto-shrinking font size if total height overflows.
+ * W4.4: Multi-line wrapped text drawing at FIXED fontSize (ZERO font shrinking, ZERO horizontal squishing).
  */
-function drawWrappedTextInBox(
+function drawWrappedTextNoShrink(
   ctx: CanvasRenderingContext2D,
   text: string,
   x: number,
   y: number,
   boxWidth: number,
   boxHeight: number,
-  baseSize: number,
+  fontSize: number,
   weight: '400' | '700' = '400',
   align: CanvasTextAlign = 'left',
-  minSize = 28,
-  padX = 14
-) {
+  padX = 14,
+  customLineH?: number
+): string[] {
   const str = String(text ?? '').trim();
-  if (!str) return;
-  const usableW = Math.max(20, boxWidth - padX * 2);
-  let size = baseSize;
-  let lines: string[] = [];
-  let lineH = size * 1.18;
-
-  while (size >= minSize) {
-    setFont(ctx, size, weight);
-    lines = wrapText(ctx, str, usableW);
-    lineH = size * 1.18;
-    if (lines.length * lineH <= boxHeight - 8) break;
-    size -= 2;
-  }
-
-  const maxLines = Math.max(1, Math.floor((boxHeight - 6) / lineH));
-  if (lines.length > maxLines) {
-    lines = lines.slice(0, maxLines);
-  }
+  if (!str) return [];
+  const usableW = Math.max(24, boxWidth - padX * 2);
+  setFont(ctx, fontSize, weight);
+  const lines = wrapText(ctx, str, usableW);
+  const lineH = customLineH ?? Math.round(fontSize * 1.2);
 
   ctx.fillStyle = INK;
   ctx.textAlign = align;
@@ -280,8 +269,10 @@ function drawWrappedTextInBox(
     align === 'center' ? x + boxWidth / 2 : align === 'right' ? x + boxWidth - padX : x + padX;
 
   lines.forEach((line, i) => {
-    ctx.fillText(line, anchorX, startY + i * lineH, usableW);
+    ctx.fillText(line, anchorX, startY + i * lineH);
   });
+
+  return lines;
 }
 
 function drawDottedLine(
@@ -321,45 +312,116 @@ function drawLine(
   ctx.restore();
 }
 
-function drawLabeledDottedField(
+/**
+ * Measures how many lines a labeled dotted field needs at FIXED font size (never shrinking!).
+ */
+function measureLabeledDottedFieldLines(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  value: string,
+  x: number,
+  endX: number,
+  labelSize = 42,
+  valueSize = 42
+): { lines: string[]; lineStart: number } {
+  setFont(ctx, labelSize, '400');
+  const labelW = ctx.measureText(label).width;
+  const lineStart = x + labelW + 14;
+  const cleanVal = String(value ?? '').trim();
+  if (!cleanVal) return { lines: [''], lineStart };
+
+  setFont(ctx, valueSize, '400');
+  const firstLineW = Math.max(40, endX - lineStart - 16);
+  const fullLineW = Math.max(40, endX - x - 16);
+
+  if (ctx.measureText(cleanVal).width <= firstLineW) {
+    return { lines: [cleanVal], lineStart };
+  }
+
+  // Wrap first segment to firstLineW, then wrap remainder to fullLineW
+  const tokens = tokenizeThai(cleanVal);
+  let line1 = '';
+  let splitIdx = 0;
+  for (let i = 0; i < tokens.length; i += 1) {
+    const candidate = line1 ? line1 + tokens[i] : tokens[i].trimStart();
+    if (ctx.measureText(candidate).width <= firstLineW) {
+      line1 = candidate;
+      splitIdx = i + 1;
+    } else {
+      break;
+    }
+  }
+
+  if (!line1.trim()) {
+    // Whole value starts on line 2 if line 1 space is too tight for first token
+    return { lines: ['', ...wrapText(ctx, cleanVal, fullLineW)], lineStart };
+  }
+
+  const restText = tokens.slice(splitIdx).join('').trim();
+  const restLines = restText ? wrapText(ctx, restText, fullLineW) : [];
+  return { lines: [line1.trim(), ...restLines], lineStart };
+}
+
+/**
+ * W4.4: Draws a labeled dotted field at FIXED font size (NO shrink, NO maxWidth squish!).
+ * If value exceeds line 1, wraps cleanly onto dotted continuation lines below.
+ */
+function drawLabeledDottedFieldNoShrink(
   ctx: CanvasRenderingContext2D,
   label: string,
   value: string,
   x: number,
   yBaseline: number,
   endX: number,
-  labelSize = 44,
-  valueSize = 44
-) {
+  labelSize = 42,
+  valueSize = 42,
+  lineStep = 54
+): number {
   setFont(ctx, labelSize, '400');
   ctx.fillStyle = INK;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(label, x, yBaseline);
 
-  const labelW = ctx.measureText(label).width;
-  const lineStart = x + labelW + 14;
+  const { lines, lineStart } = measureLabeledDottedFieldLines(
+    ctx,
+    label,
+    value,
+    x,
+    endX,
+    labelSize,
+    valueSize
+  );
+
   if (endX > lineStart + 10) {
     drawDottedLine(ctx, lineStart, endX, yBaseline + 6, 2);
-    if (value.trim()) {
-      const maxValW = endX - lineStart - 16;
-      let sz = valueSize;
-      setFont(ctx, sz, '400');
-      while (sz > 28 && ctx.measureText(value).width > maxValW) {
-        sz -= 2;
-        setFont(ctx, sz, '400');
-      }
+    if (lines[0]) {
+      setFont(ctx, valueSize, '400');
       ctx.fillStyle = INK;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
-      ctx.fillText(value, lineStart + 10, yBaseline - 2, maxValW);
+      ctx.fillText(lines[0], lineStart + 10, yBaseline - 2);
     }
   }
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const ly = yBaseline + i * lineStep;
+    drawDottedLine(ctx, x + 20, endX, ly + 6, 2);
+    if (lines[i]) {
+      setFont(ctx, valueSize, '400');
+      ctx.fillStyle = INK;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(lines[i], x + 28, ly - 2);
+    }
+  }
+
+  return lines.length;
 }
 
 /**
- * Helper to pre-calculate Page 2+ visual line pages using real Canvas measureText so
- * `Kp7PrintPage` knows exact `totalPages` before rendering each page!
+ * Pre-calculates Page 2+ visual line pages using real Canvas measureText across ALL 8 columns
+ * at fixed 40px Sarabun (W4.4 no-shrink wrapping).
  */
 export function computeKp7CareerVisualPages(
   bundle: Kp7DataBundle,
@@ -384,21 +446,23 @@ export function computeKp7CareerVisualPages(
     return { rows, pages: expandAndPaginateCareerLines(rows, linesPerPage) };
   }
 
-  setFont(ctx, 42, '400');
-  const posMaxW = P2_COLS[1].width - 26;
-  const lvlMaxW = P2_COLS[4].width - 20;
-  const refMaxW = P2_COLS[7].width - 26;
+  setFont(ctx, 40, '400');
+  const padX = 12;
 
   const pages = expandAndPaginateCareerLines(rows, linesPerPage, (seg, col) => {
-    const w = col === 'position' ? posMaxW : col === 'level' ? lvlMaxW : refMaxW;
-    return wrapText(ctx, seg, w);
+    const usableW = Math.max(40, P2_COL_WIDTH_MAP[col] - padX * 2);
+    return wrapText(ctx, seg, usableW);
   });
 
   return { rows, pages };
 }
 
 /**
- * Renders Official KP.7 Page 1 at 300 DPI (2480 x 3508 px) matching `แบบฟอร์ม กพ7.pdf` + `นร ๑๐๐๖/ว ๒๓`.
+ * Renders Official KP.7 Page 1 at 300 DPI (2480 x 3508 px).
+ * Implements W4.1 (Item 2 CID on line 2), W4.2 (Item 8 maiden surname on line 2),
+ * W4.4 (No-shrink wrapping + variable row heights + vertical divider fix + overflow cascade),
+ * W4.5 (Slash-free bottom signature dates), W4.6 (Widened Item 10 cols 2 & 3),
+ * and User C3 Symmetry (Left Items 1,3,4 symmetrically aligned with expanded Right Items 2,5,6,7,8,9).
  */
 export async function renderKp7Page1(
   canvas: HTMLCanvasElement,
@@ -420,282 +484,322 @@ export async function renderKp7Page1(
   ctx.fillRect(0, 0, KP7_A4_WIDTH, KP7_A4_HEIGHT);
 
   // =========================================================================
-  // TOP HEADER (Outside border — exact official form: กระทรวง... กรม...  ก.พ. ๗)
+  // TOP HEADER (Outside border: กระทรวง... กรม... ก.พ. ๗)
   // =========================================================================
-  const headerY = 175;
+  const headerY = 172;
   const ministryVal = toThaiDigits(cleanDisplaySegment(options.ministryName), useThai);
   const deptVal = toThaiDigits(
     cleanDisplaySegment(options.departmentName) || cleanDisplaySegment(person.bureau_name),
     useThai
   );
 
-  // Top-right "ก.พ. ๗" (NO rectangle box per official form!)
-  setFont(ctx, 60, '700');
-  ctx.fillStyle = INK;
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(toThaiDigits('ก.พ. 7', useThai), ML + W, headerY - 26);
+  // Top-right "ก.พ. ๗" (NO box)
+  drawFixedText(ctx, toThaiDigits('ก.พ. 7', useThai), ML + W, headerY - 26, 60, '700', 'right', 'alphabetic');
 
-  // Ministry + Department dotted fields on single top line
-  drawLabeledDottedField(ctx, 'กระทรวง', ministryVal, ML, headerY, ML + 960, 46, 46);
-  drawLabeledDottedField(ctx, 'กรม', deptVal, ML + 985, headerY, ML + W - 210, 46, 46);
+  drawLabeledDottedFieldNoShrink(ctx, 'กระทรวง', ministryVal, ML, headerY, ML + 950, 44, 44);
+  drawLabeledDottedFieldNoShrink(ctx, 'กรม', deptVal, ML + 975, headerY, ML + W - 210, 44, 44);
 
   // =========================================================================
-  // ITEMS 1–9 OFFICIAL 2-COLUMN GRID
+  // ITEMS 1–9 OFFICIAL 2-COLUMN GRID (Symmetric Left/Right Row Heights per C3!)
   // =========================================================================
-  const gridTop = 212;
-  const midX = ML + 1090; // Left col = 1090px, Right col = 1110px
+  const gridTop = 208;
+  const midX = ML + 1090; // Left = 1090px, Right = 1110px
   const rightW = ML + W - midX;
+  const padL = ML + 22;
+  const leftEnd = midX - 24;
+  const r56SplitX = midX + Math.round(rightW * 0.48);
 
-  const row1H = 278; // Item 1 (left) | Item 2 top + Items 5 & 6 bottom (right)
-  const row2H = 186; // Item 3 (left) | Items 7 & 8 shared box without divider (right)
-  const row3H = 166; // Item 4 (left) | Item 9 (right)
-  const gridBottom = gridTop + row1H + row2H + row3H; // 842
+  // Pre-measure fields so Left & Right cells expand symmetrically whenever content wraps
+  const item1 = buildKp7Item1NameFields(person, timelines.nameHistory, useThai);
+  const empTypeText = toThaiDigits(cleanDisplaySegment(person.employment_type_name), useThai);
+  const birthInfo = formatThaiDateInWords(person.birth_date, useThai);
+  const retireIso = calculateRetirementDateIso(person.birth_date);
+  const retireInfo = formatThaiDateInWords(retireIso, useThai);
+  const fatherName = toThaiDigits(cleanDisplaySegment(person.father_full_name), useThai);
+  const motherName = toThaiDigits(cleanDisplaySegment(person.mother_full_name), useThai);
+  const motherMaiden = toThaiDigits(cleanDisplaySegment(person.mother_maiden_name), useThai);
+  const spouseName = toThaiDigits(cleanDisplaySegment(person.spouse_full_name), useThai);
+  const spouseMaiden = toThaiDigits(cleanDisplaySegment(person.spouse_maiden_name), useThai);
 
-  // Outer border of Items 1–9 (thick 3px crisp black border)
+  // Row 1 height calculation (Right: Item 2 [144px] + Items 5 & 6 [>=150px] vs Left: Item 1 [3 lines])
+  const r1RightTopH = 144;
+  setFont(ctx, 38, '400');
+  const empLines = empTypeText ? wrapText(ctx, empTypeText, ML + W - r56SplitX - 28) : [];
+  const r1RightBotH = Math.max(150, 74 + empLines.length * 46 + 18);
+  const r1RightTotalH = r1RightTopH + r1RightBotH;
+
+  const p1Lines = measureLabeledDottedFieldLines(ctx, 'คำนำหน้านาม', item1.prefixDisplay, padL, leftEnd, 42, 42).lines.length;
+  const f1Lines = measureLabeledDottedFieldLines(ctx, `${toThaiDigits('1', useThai)}. ชื่อ`, item1.firstNameDisplay, padL, leftEnd, 42, 42).lines.length;
+  const l1Lines = measureLabeledDottedFieldLines(ctx, 'นามสกุล', item1.lastNameDisplay, padL, leftEnd, 42, 42).lines.length;
+  const r1LeftMinH = 38 + (p1Lines + f1Lines + l1Lines) * 56 + 44;
+  const row1H = Math.max(294, r1RightTotalH, r1LeftMinH);
+
+  // Row 2 height calculation (Right: Item 7 + Item 8 + Line 3 นามสกุลเดิม vs Left: Item 3 birth date + words)
+  const f7Lines = measureLabeledDottedFieldLines(ctx, `${toThaiDigits('7', useThai)}. ชื่อ - นามสกุลบิดา`, fatherName, midX + 20, ML + W - 22, 40, 42).lines.length;
+  const m8Lines = measureLabeledDottedFieldLines(ctx, `${toThaiDigits('8', useThai)}. ชื่อ - นามสกุลมารดา`, motherName, midX + 20, ML + W - 22, 40, 42).lines.length;
+  const mm8Lines = measureLabeledDottedFieldLines(ctx, 'นามสกุลเดิม', motherMaiden, midX + 58, ML + W - 22, 40, 42).lines.length;
+  const r2RightMinH = 34 + (f7Lines + m8Lines + mm8Lines) * 58 + 26;
+
+  setFont(ctx, 38, '400');
+  const birthWordLines = birthInfo.wordsText ? wrapText(ctx, `(${birthInfo.wordsText})`, leftEnd - padL - 20) : [];
+  const r2LeftMinH = 104 + Math.max(1, birthWordLines.length) * 48 + 30;
+  const row2H = Math.max(232, r2RightMinH, r2LeftMinH);
+
+  // Row 3 height calculation (Right: Item 9 spouse + นามสกุลเดิม vs Left: Item 4 retirement + words)
+  const s9Lines = measureLabeledDottedFieldLines(ctx, `${toThaiDigits('9', useThai)}. ชื่อ - นามสกุลคู่สมรส`, spouseName, midX + 20, ML + W - 22, 40, 42).lines.length;
+  const sm9Lines = measureLabeledDottedFieldLines(ctx, 'นามสกุลเดิม', spouseMaiden, midX + 58, ML + W - 22, 40, 42).lines.length;
+  const r3RightMinH = 34 + (s9Lines + sm9Lines) * 58 + 24;
+
+  setFont(ctx, 38, '400');
+  const retireWordLines = retireInfo.wordsText ? wrapText(ctx, `(${retireInfo.wordsText})`, leftEnd - padL - 20) : [];
+  const r3LeftMinH = 96 + Math.max(1, retireWordLines.length) * 48 + 26;
+  const row3H = Math.max(172, r3RightMinH, r3LeftMinH);
+
+  const r1Bottom = gridTop + row1H;
+  const r2Bottom = r1Bottom + row2H;
+  const gridBottom = r2Bottom + row3H;
+
+  // Outer border & symmetric dividers of Items 1–9
   ctx.strokeStyle = LINE_DARK;
   ctx.lineWidth = 3;
   ctx.strokeRect(ML, gridTop, W, gridBottom - gridTop);
-
-  // Main vertical divider between Left (Items 1, 3, 4) & Right (Items 2, 5/6, 7/8, 9)
   drawLine(ctx, midX, gridTop, midX, gridBottom, 2.5);
-
-  // Horizontal dividers
-  const r1Bottom = gridTop + row1H;
-  const r2Bottom = r1Bottom + row2H;
   drawLine(ctx, ML, r1Bottom, ML + W, r1Bottom, 2.5);
   drawLine(ctx, ML, r2Bottom, ML + W, r2Bottom, 2.5);
 
-  // Right-side Row 1 internal split: top = Item 2 (126px), bottom = Items 5 & 6 (152px)
-  const r1RightMidY = gridTop + 126;
-  const r56SplitX = midX + Math.round(rightW * 0.48);
+  const r1RightMidY = gridTop + r1RightTopH;
   drawLine(ctx, midX, r1RightMidY, ML + W, r1RightMidY, 2.2);
   drawLine(ctx, r56SplitX, r1RightMidY, r56SplitX, r1Bottom, 2.2);
 
-  // --- Item 1 (Left Row 1): คำนำหน้านาม / ๑. ชื่อ / นามสกุล ---
-  const item1 = buildKp7Item1NameFields(person, timelines.nameHistory, useThai);
-  const padL = ML + 22;
-  const leftEnd = midX - 24;
-  drawLabeledDottedField(ctx, 'คำนำหน้านาม', item1.prefixDisplay, padL, gridTop + 72, leftEnd, 44, 44);
-  drawLabeledDottedField(
-    ctx,
-    `${toThaiDigits('1', useThai)}. ชื่อ`,
-    item1.firstNameDisplay,
-    padL,
-    gridTop + 158,
-    leftEnd,
-    44,
-    46
-  );
-  drawLabeledDottedField(ctx, 'นามสกุล', item1.lastNameDisplay, padL, gridTop + 242, leftEnd, 44, 46);
+  // --- Item 1 (Left Row 1): Symmetrically spaced across full row1H ---
+  const item1TotalLines = p1Lines + f1Lines + l1Lines;
+  const item1Step = Math.max(54, Math.floor((row1H - 68) / Math.max(3, item1TotalLines)));
+  let y1Cursor = gridTop + Math.round((row1H - (item1TotalLines - 1) * item1Step) / 2) + 12;
+  const usedP1 = drawLabeledDottedFieldNoShrink(ctx, 'คำนำหน้านาม', item1.prefixDisplay, padL, y1Cursor, leftEnd, 42, 42, 52);
+  y1Cursor += usedP1 * item1Step;
+  const usedF1 = drawLabeledDottedFieldNoShrink(ctx, `${toThaiDigits('1', useThai)}. ชื่อ`, item1.firstNameDisplay, padL, y1Cursor, leftEnd, 42, 44, 52);
+  y1Cursor += usedF1 * item1Step;
+  drawLabeledDottedFieldNoShrink(ctx, 'นามสกุล', item1.lastNameDisplay, padL, y1Cursor, leftEnd, 42, 44, 52);
 
-  // --- Item 2 (Right Row 1 Top): ๒. เลขประจำตัวประชาชน (13 underscore slots, NO boxes!) ---
-  const cidLabel = `${toThaiDigits('2', useThai)}. เลขประจำตัวประชาชน`;
-  setFont(ctx, 42, '400');
-  ctx.fillStyle = INK;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(cidLabel, midX + 20, gridTop + 76);
+  // --- Item 2 (Right Row 1 Top): W4.1 — Label on Line 1, 13 symmetric underscore slots on Line 2 ---
+  drawFixedText(
+    ctx,
+    `${toThaiDigits('2', useThai)}. เลขประจำตัวประชาชน`,
+    midX + 20,
+    gridTop + 52,
+    42,
+    '400',
+    'left',
+    'alphabetic'
+  );
 
   const cidSlots = splitCid13Slots(person.cid, useThai);
   const groups = [1, 4, 5, 2, 1];
-  const slotW = 36;
-  const slotGap = 8;
-  const dashW = 24;
-  let cx = midX + 410;
-  const cidBaseY = gridTop + 82;
+  const slotW = 48;
+  const innerGap = 10;
+  const dashSlotW = 44;
+  // Exact symmetric width: 13*48 + 8*10 + 4*44 = 624 + 80 + 176 = 880px -> margins = (1110 - 880)/2 = 115px each side!
+  const totalCidW = 13 * slotW + 8 * innerGap + 4 * dashSlotW;
+  let cx = midX + Math.round((rightW - totalCidW) / 2);
+  const cidBaseY = gridTop + 118;
   let digitIdx = 0;
 
   groups.forEach((grpLen, gIdx) => {
     for (let k = 0; k < grpLen; k += 1) {
       const ch = cidSlots[digitIdx] ?? '';
       digitIdx += 1;
-      // Draw crisp underscore
       drawLine(ctx, cx, cidBaseY + 6, cx + slotW, cidBaseY + 6, 2.2, '#222222');
       if (ch) {
-        setFont(ctx, 44, '700');
-        ctx.fillStyle = INK;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'alphabetic';
-        ctx.fillText(ch, cx + slotW / 2, cidBaseY - 2);
+        drawFixedText(ctx, ch, cx + slotW / 2, cidBaseY - 2, 44, '700', 'center', 'alphabetic');
       }
-      cx += slotW + slotGap;
+      cx += slotW;
+      if (k < grpLen - 1) cx += innerGap;
     }
     if (gIdx < groups.length - 1) {
-      setFont(ctx, 40, '400');
-      ctx.fillStyle = INK;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText('-', cx + dashW / 2 - 4, cidBaseY - 4);
-      cx += dashW;
+      drawFixedText(ctx, '-', cx + dashSlotW / 2, cidBaseY - 4, 42, '400', 'center', 'alphabetic');
+      cx += dashSlotW;
     }
   });
 
   // --- Item 5 (Right Row 1 Bottom-Left): ๕. วันบรรจุ ---
   const startServiceInfo = formatThaiDateInWords(person.start_service_date, useThai);
-  setFont(ctx, 42, '400');
-  ctx.fillStyle = INK;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(`${toThaiDigits('5', useThai)}. วันบรรจุ`, midX + 20, r1RightMidY + 56);
-  drawDottedLine(ctx, midX + 20, r56SplitX - 20, r1Bottom - 26, 2);
+  drawFixedText(ctx, `${toThaiDigits('5', useThai)}. วันบรรจุ`, midX + 20, r1RightMidY + 48, 40, '400', 'left', 'alphabetic');
+  const item5BoxY = r1RightMidY + 62;
+  const item5BoxH = r1Bottom - item5BoxY - 12;
   if (startServiceInfo.numericText) {
-    drawFittedText(
+    drawWrappedTextNoShrink(
       ctx,
       startServiceInfo.numericText,
-      midX + (r56SplitX - midX) / 2,
-      r1Bottom - 46,
-      r56SplitX - midX - 44,
-      44,
-      '400',
-      'center',
-      30
-    );
-  }
-
-  // --- Item 6 (Right Row 1 Bottom-Right): ๖. ประเภทข้าราชการ ---
-  setFont(ctx, 42, '400');
-  ctx.fillStyle = INK;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(`${toThaiDigits('6', useThai)}. ประเภทข้าราชการ`, r56SplitX + 18, r1RightMidY + 56);
-  const empTypeText = toThaiDigits(cleanDisplaySegment(person.employment_type_name), useThai);
-  if (empTypeText) {
-    drawWrappedTextInBox(
-      ctx,
-      empTypeText,
-      r56SplitX + 10,
-      r1RightMidY + 66,
-      ML + W - r56SplitX - 20,
-      r1Bottom - r1RightMidY - 72,
+      midX + 10,
+      item5BoxY,
+      r56SplitX - midX - 20,
+      item5BoxH,
       40,
       '400',
       'center',
-      28,
-      10
+      8,
+      46
     );
   } else {
-    drawDottedLine(ctx, r56SplitX + 20, ML + W - 20, r1Bottom - 26, 2);
+    drawDottedLine(ctx, midX + 20, r56SplitX - 20, r1Bottom - 28, 2);
   }
 
-  // --- Item 3 (Left Row 2): ๓. วัน เดือน ปีเกิด + (คำอ่านไม่เว้นวรรค) ---
-  const birthInfo = formatThaiDateInWords(person.birth_date, useThai);
-  drawLabeledDottedField(
+  // --- Item 6 (Right Row 1 Bottom-Right): ๖. ประเภทข้าราชการ (No-shrink wrap!) ---
+  drawFixedText(ctx, `${toThaiDigits('6', useThai)}. ประเภทข้าราชการ`, r56SplitX + 18, r1RightMidY + 48, 40, '400', 'left', 'alphabetic');
+  const item6BoxY = r1RightMidY + 62;
+  const item6BoxH = r1Bottom - item6BoxY - 10;
+  if (empTypeText) {
+    drawWrappedTextNoShrink(
+      ctx,
+      empTypeText,
+      r56SplitX + 8,
+      item6BoxY,
+      ML + W - r56SplitX - 16,
+      item6BoxH,
+      38,
+      '400',
+      'center',
+      10,
+      46
+    );
+  } else {
+    drawDottedLine(ctx, r56SplitX + 20, ML + W - 20, r1Bottom - 28, 2);
+  }
+
+  // --- Item 3 (Left Row 2): Symmetrically balanced inside expanded row2H ---
+  const r2LeftLine1Y = r1Bottom + Math.round(row2H * 0.33);
+  drawLabeledDottedFieldNoShrink(
     ctx,
     `${toThaiDigits('3', useThai)}. วัน เดือน ปีเกิด`,
     birthInfo.numericText,
     padL,
-    r1Bottom + 68,
+    r2LeftLine1Y,
     leftEnd,
-    44,
-    44
+    42,
+    42
   );
-  drawDottedLine(ctx, padL + 20, leftEnd, r1Bottom + 150, 2);
+  const birthWordsBoxTop = r2LeftLine1Y + 20;
+  const birthWordsBoxH = r2Bottom - birthWordsBoxTop - 16;
   if (birthInfo.wordsText) {
-    drawFittedText(
+    drawWrappedTextNoShrink(
       ctx,
       `(${birthInfo.wordsText})`,
-      padL + (leftEnd - padL) / 2,
-      r1Bottom + 128,
-      leftEnd - padL - 24,
-      42,
+      padL + 10,
+      birthWordsBoxTop,
+      leftEnd - padL - 20,
+      birthWordsBoxH,
+      38,
       '400',
       'center',
-      26
+      8,
+      46
     );
+  } else {
+    drawDottedLine(ctx, padL + 20, leftEnd, r2Bottom - 36, 2);
   }
 
-  // --- Items 7 & 8 (Right Row 2 — shared box without horizontal line between 7 & 8) ---
-  const fatherName = toThaiDigits(cleanDisplaySegment(person.father_full_name), useThai);
-  const motherName = toThaiDigits(cleanDisplaySegment(person.mother_full_name), useThai);
-  const motherMaiden = toThaiDigits(cleanDisplaySegment(person.mother_maiden_name), useThai);
-  drawLabeledDottedField(
+  // --- Items 7 & 8 (Right Row 2): W4.2 — Item 8 นามสกุลเดิม on Line 2 identical to Item 9 ---
+  const r2RightTotalLines = f7Lines + m8Lines + mm8Lines;
+  const r2RightStep = Math.max(54, Math.floor((row2H - 44) / Math.max(3, r2RightTotalLines)));
+  let y2Cursor = r1Bottom + Math.round((row2H - (r2RightTotalLines - 1) * r2RightStep) / 2) + 12;
+  const used7 = drawLabeledDottedFieldNoShrink(
     ctx,
     `${toThaiDigits('7', useThai)}. ชื่อ - นามสกุลบิดา`,
     fatherName,
     midX + 20,
-    r1Bottom + 66,
+    y2Cursor,
     ML + W - 22,
+    40,
     42,
-    44
+    52
   );
-  // Item 8: split line for mother full name + maiden surname
-  const motherSplitX = midX + Math.round(rightW * 0.62);
-  drawLabeledDottedField(
+  y2Cursor += used7 * r2RightStep;
+  const used8 = drawLabeledDottedFieldNoShrink(
     ctx,
     `${toThaiDigits('8', useThai)}. ชื่อ - นามสกุลมารดา`,
     motherName,
     midX + 20,
-    r1Bottom + 148,
-    motherSplitX - 10,
+    y2Cursor,
+    ML + W - 22,
     40,
-    42
+    42,
+    52
   );
-  drawLabeledDottedField(
+  y2Cursor += used8 * r2RightStep;
+  drawLabeledDottedFieldNoShrink(
     ctx,
     'นามสกุลเดิม',
     motherMaiden,
-    motherSplitX + 4,
-    r1Bottom + 148,
+    midX + 58,
+    y2Cursor,
     ML + W - 22,
-    38,
-    40
+    40,
+    42,
+    52
   );
 
-  // --- Item 4 (Left Row 3): ๔. วันครบเกษียณอายุ + (คำอ่านไม่เว้นวรรค) ---
-  const retireIso = calculateRetirementDateIso(person.birth_date);
-  const retireInfo = formatThaiDateInWords(retireIso, useThai);
-  drawLabeledDottedField(
+  // --- Item 4 (Left Row 3): Symmetrically balanced inside row3H matching Item 9 ---
+  const r3LeftLine1Y = r2Bottom + Math.round(row3H * 0.38);
+  drawLabeledDottedFieldNoShrink(
     ctx,
     `${toThaiDigits('4', useThai)}. วันครบเกษียณอายุ`,
     retireInfo.numericText,
     padL,
-    r2Bottom + 64,
+    r3LeftLine1Y,
     leftEnd,
-    44,
-    44
+    42,
+    42
   );
-  drawDottedLine(ctx, padL + 20, leftEnd, r2Bottom + 140, 2);
+  const retireWordsTop = r3LeftLine1Y + 16;
+  const retireWordsH = gridBottom - retireWordsTop - 12;
   if (retireInfo.wordsText) {
-    drawFittedText(
+    drawWrappedTextNoShrink(
       ctx,
       `(${retireInfo.wordsText})`,
-      padL + (leftEnd - padL) / 2,
-      r2Bottom + 118,
-      leftEnd - padL - 24,
-      42,
+      padL + 10,
+      retireWordsTop,
+      leftEnd - padL - 20,
+      retireWordsH,
+      38,
       '400',
       'center',
-      26
+      8,
+      46
     );
+  } else {
+    drawDottedLine(ctx, padL + 20, leftEnd, gridBottom - 28, 2);
   }
 
   // --- Item 9 (Right Row 3): ๙. ชื่อ - นามสกุลคู่สมรส + นามสกุลเดิม ---
-  const spouseName = toThaiDigits(cleanDisplaySegment(person.spouse_full_name), useThai);
-  const spouseMaiden = toThaiDigits(cleanDisplaySegment(person.spouse_maiden_name), useThai);
-  drawLabeledDottedField(
+  const r3RightTotalLines = s9Lines + sm9Lines;
+  const r3RightStep = Math.max(54, Math.floor((row3H - 42) / Math.max(2, r3RightTotalLines)));
+  let y3Cursor = r2Bottom + Math.round((row3H - (r3RightTotalLines - 1) * r3RightStep) / 2) + 12;
+  const used9 = drawLabeledDottedFieldNoShrink(
     ctx,
     `${toThaiDigits('9', useThai)}. ชื่อ - นามสกุลคู่สมรส`,
     spouseName,
     midX + 20,
-    r2Bottom + 64,
+    y3Cursor,
     ML + W - 22,
+    40,
     42,
-    44
+    52
   );
-  drawLabeledDottedField(
+  y3Cursor += used9 * r3RightStep;
+  drawLabeledDottedFieldNoShrink(
     ctx,
     'นามสกุลเดิม',
     spouseMaiden,
     midX + 58,
-    r2Bottom + 138,
+    y3Cursor,
     ML + W - 22,
     40,
-    42
+    42,
+    52
   );
 
   // =========================================================================
-  // ITEMS 10–13: DYNAMIC FULL-A4 ROW-FILL ENGINE (Seamless Outer Border, White Headers)
+  // ITEMS 10–13: NO-SHRINK WRAPPING + VARIABLE ROW HEIGHTS + VERTICAL DIVIDER FIX
   // =========================================================================
   const lookupById = new Map(master.items.map((i) => [i.id, i]));
 
@@ -727,9 +831,7 @@ export async function renderKp7Page1(
     const startTxt = formatThaiShortDateKp7(tr.start_date, useThai);
     const endTxt = formatThaiShortDateKp7(tr.end_date, useThai);
     const rangeTxt =
-      startTxt && endTxt && startTxt !== endTxt
-        ? `${startTxt} - ${endTxt}`
-        : startTxt || endTxt;
+      startTxt && endTxt && startTxt !== endTxt ? `${startTxt} - ${endTxt}` : startTxt || endTxt;
     return [
       toThaiDigits(cleanDisplaySegment(tr.course_name), useThai),
       rangeTxt,
@@ -745,7 +847,6 @@ export async function renderKp7Page1(
       .filter(Boolean)
       .join(' — ');
     return [
-      // Official KP.7 Item 13 col 1: 4-digit BE year ONLY!
       formatThaiYearBeOnly(dr.effective_date, useThai),
       toThaiDigits(detail, useThai),
       toThaiDigits(cleanDisplaySegment(dr.document_ref), useThai),
@@ -755,12 +856,13 @@ export async function renderKp7Page1(
   const sections = [
     {
       title: `${toThaiDigits('10', useThai)}. ประวัติการศึกษา`,
+      // W4.6: Widened Col 2 (0.21->0.25) & Col 3 (0.35->0.43), Col 1 = 0.32 (sum = 1.00)
       cols: [
-        { label: 'สถานศึกษา', ratio: 0.44, align: 'left' as const },
-        { label: 'ตั้งแต่ - ถึง (เดือน ปี)', ratio: 0.21, align: 'center' as const },
-        { label: 'วุฒิ (สาขาวิชาเอก)', ratio: 0.35, align: 'left' as const },
+        { label: 'สถานศึกษา', ratio: 0.32, align: 'left' as const },
+        { label: 'ตั้งแต่ - ถึง (เดือน ปี)', ratio: 0.25, align: 'center' as const },
+        { label: 'วุฒิ (สาขาวิชาเอก)', ratio: 0.43, align: 'left' as const },
       ],
-      baseRows: 9,
+      baseRows: 8,
       rows: eduData,
     },
     {
@@ -796,66 +898,173 @@ export async function renderKp7Page1(
     },
   ];
 
-  // Calculate dynamic row counts & row height to fill Page 1 down to Y = 2945 (eliminating dead whitespace!)
-  const tablesTop = gridBottom; // seamless outer border directly joined below Items 1–9
-  const tablesTargetBottom = 2945;
-  const titleBarH = 64;
+  const tablesTop = gridBottom;
+  const tablesTargetBottom = 2955;
+  const titleBarH = 60;
   const colHeaderH = 74;
-  const fixedChromeH = sections.length * (titleBarH + colHeaderH); // 552
-  const availableRowsH = tablesTargetBottom - tablesTop - fixedChromeH; // ~1551
+  const fixedChromeH = sections.length * (titleBarH + colHeaderH);
+  const availableRowsH = Math.max(600, tablesTargetBottom - tablesTop - fixedChromeH);
 
+  // Precompute exact column pixel widths for each section
+  const sectionColWidths = sections.map((sec) => {
+    const widths = sec.cols.map((c) => Math.round(W * c.ratio));
+    const sumW = widths.reduce((a, b) => a + b, 0);
+    widths[widths.length - 1] += W - sumW;
+    return widths;
+  });
+
+  // Fixed cell font size = 38px (NEVER shrunk!)
+  const cellFontSize = 38;
+  const cellPadX = 14;
+  let cellLineH = 46;
+  let cellPadY = 12;
+
+  setFont(ctx, cellFontSize, '400');
+  // Compute required line count per actual data row
+  const dataRowLineCounts = sections.map((sec, sIdx) =>
+    sec.rows.map((rowVals) => {
+      let maxLines = 1;
+      sec.cols.forEach((_, cIdx) => {
+        const val = rowVals[cIdx] ?? '';
+        if (val) {
+          const usableW = Math.max(24, sectionColWidths[sIdx][cIdx] - cellPadX * 2);
+          const wrapped = wrapText(ctx, val, usableW);
+          if (wrapped.length > maxLines) maxLines = wrapped.length;
+        }
+      });
+      return maxLines;
+    })
+  );
+
+  // Start with base row counts per section
   const rowCounts = sections.map((s) => Math.max(s.baseRows, s.rows.length));
-  const totalBaseRows = rowCounts.reduce((a, b) => a + b, 0);
+  const minBlankRowH = 68;
 
-  // Target ideal row height ~76px for 16pt readability; expand blank rows proportionally if space allows
-  const idealRowH = 76;
-  const targetTotalRows = Math.max(totalBaseRows, Math.floor(availableRowsH / idealRowH));
-  let extraRows = targetTotalRows - totalBaseRows;
-  // Distribute extra blank rows primarily to Item 10 (Education) then Item 12 (Training)
+  const computeTotalNeededH = (counts: number[], lineH: number, padY: number, blankH: number) => {
+    let total = 0;
+    counts.forEach((cnt, sIdx) => {
+      const lineCounts = dataRowLineCounts[sIdx];
+      for (let r = 0; r < cnt; r += 1) {
+        const lines = lineCounts[r] ?? 1;
+        total += Math.max(blankH, lines * lineH + padY * 2);
+      }
+    });
+    return total;
+  };
+
+  // Overflow Cascade Step 1 & 2: trim blank rows if wrapped data rows exceed availableRowsH
+  while (computeTotalNeededH(rowCounts, cellLineH, cellPadY, minBlankRowH) > availableRowsH) {
+    let trimmed = false;
+    // Trim blank rows from largest-padded sections first (Education -> Training -> License -> Disc)
+    for (const sIdx of [0, 2, 1, 3]) {
+      const minAllowed = Math.max(1, sections[sIdx].rows.length);
+      if (rowCounts[sIdx] > minAllowed) {
+        rowCounts[sIdx] -= 1;
+        trimmed = true;
+        break;
+      }
+    }
+    if (!trimmed) break;
+  }
+
+  // Overflow Cascade Step 3: if actual data rows alone still exceed availableRowsH, tighten padding/lineH (keep 38px font!)
+  if (computeTotalNeededH(rowCounts, cellLineH, cellPadY, minBlankRowH) > availableRowsH) {
+    cellPadY = 6;
+    cellLineH = 41;
+  }
+
+  // Expand spare space evenly into blank/single rows so bottom border aligns cleanly near tablesTargetBottom
+  const baseBlankH = Math.min(
+    78,
+    Math.max(
+      54,
+      Math.floor(
+        (availableRowsH -
+          rowCounts.reduce((acc, cnt, sIdx) => {
+            const lc = dataRowLineCounts[sIdx];
+            let extra = 0;
+            for (let r = 0; r < cnt; r += 1) {
+              const lines = lc[r] ?? 1;
+              if (lines > 1) extra += lines * cellLineH + cellPadY * 2;
+            }
+            return acc + extra;
+          }, 0)) /
+          Math.max(
+            1,
+            rowCounts.reduce((acc, cnt, sIdx) => {
+              const lc = dataRowLineCounts[sIdx];
+              let singles = 0;
+              for (let r = 0; r < cnt; r += 1) {
+                if ((lc[r] ?? 1) <= 1) singles += 1;
+              }
+              return acc + singles;
+            }, 0)
+          )
+      )
+    )
+  );
+
+  // Build exact per-row height arrays
+  const sectionRowHeights = rowCounts.map((cnt, sIdx) => {
+    const lc = dataRowLineCounts[sIdx];
+    const heights: number[] = [];
+    for (let r = 0; r < cnt; r += 1) {
+      const lines = lc[r] ?? 1;
+      heights.push(Math.max(baseBlankH, lines * cellLineH + cellPadY * 2));
+    }
+    return heights;
+  });
+
+  // Add extra blank rows only if significant bottom whitespace (> 76px) remains
+  let usedH = sectionRowHeights.reduce((sum, arr) => sum + arr.reduce((a, b) => a + b, 0), 0);
   const extraOrder = [0, 2, 1, 3];
   let eoIdx = 0;
-  while (extraRows > 0) {
-    rowCounts[extraOrder[eoIdx % extraOrder.length]] += 1;
-    extraRows -= 1;
+  while (availableRowsH - usedH >= baseBlankH) {
+    const targetSec = extraOrder[eoIdx % extraOrder.length];
+    sectionRowHeights[targetSec].push(baseBlankH);
+    rowCounts[targetSec] += 1;
+    usedH += baseBlankH;
     eoIdx += 1;
   }
 
-  const finalTotalRows = rowCounts.reduce((a, b) => a + b, 0);
-  const rowH = availableRowsH / finalTotalRows; // fills EXACTLY to tablesTargetBottom!
+  // Distribute tiny residual (< baseBlankH) proportionally across single-line rows so bottom ends cleanly
+  const residual = availableRowsH - usedH;
+  if (residual > 0 && residual < 160) {
+    const totalRowsAll = sectionRowHeights.reduce((sum, arr) => sum + arr.length, 0);
+    const delta = residual / Math.max(1, totalRowsAll);
+    sectionRowHeights.forEach((arr) => {
+      for (let i = 0; i < arr.length; i += 1) arr[i] += delta;
+    });
+  }
 
   let curY = tablesTop;
 
   sections.forEach((sec, sIdx) => {
-    const count = rowCounts[sIdx];
-    const colWidths = sec.cols.map((c) => Math.round(W * c.ratio));
-    // Ensure exact sum === W
-    const sumW = colWidths.reduce((a, b) => a + b, 0);
-    colWidths[colWidths.length - 1] += W - sumW;
+    const heights = sectionRowHeights[sIdx];
+    const colWidths = sectionColWidths[sIdx];
+    const sectionBodyH = heights.reduce((a, b) => a + b, 0);
 
-    // 1. Section Title Bar (White background — NO grey fill!)
+    // 1. Section Title Bar (White background)
     drawLine(ctx, ML, curY, ML + W, curY, 2.5);
-    setFont(ctx, 44, '700');
-    ctx.fillStyle = INK;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(sec.title, ML + 20, curY + titleBarH / 2 + 2);
+    drawFixedText(ctx, sec.title, ML + 20, curY + titleBarH / 2 + 2, 42, '700', 'left', 'middle');
     curY += titleBarH;
 
-    // 2. Column Header Row (White background)
+    // 2. Column Header Row + Full Variable-Height Vertical Dividers (sectionBodyH fix!)
     drawLine(ctx, ML, curY, ML + W, curY, 2.2);
     let colX = ML;
     sec.cols.forEach((col, cIdx) => {
       const cw = colWidths[cIdx];
       if (cIdx > 0) {
-        drawLine(ctx, colX, curY, colX, curY + colHeaderH + count * rowH, 2.0, LINE_LIGHT);
+        drawLine(ctx, colX, curY, colX, curY + colHeaderH + sectionBodyH, 2.0, LINE_LIGHT);
       }
-      drawWrappedTextInBox(ctx, col.label, colX, curY, cw, colHeaderH, 40, '700', 'center', 30, 8);
+      drawWrappedTextNoShrink(ctx, col.label, colX, curY, cw, colHeaderH, 36, '700', 'center', 8, 40);
       colX += cw;
     });
     curY += colHeaderH;
 
-    // 3. Data & Blank Ruled Rows
-    for (let r = 0; r < count; r += 1) {
+    // 3. Data & Blank Ruled Rows (exact variable heights)
+    for (let r = 0; r < heights.length; r += 1) {
+      const rh = heights[r];
       drawLine(ctx, ML, curY, ML + W, curY, 1.8, LINE_LIGHT);
       const rowVals = sec.rows[r];
       if (rowVals) {
@@ -864,24 +1073,24 @@ export async function renderKp7Page1(
           const cw = colWidths[cIdx];
           const val = rowVals[cIdx] ?? '';
           if (val) {
-            drawWrappedTextInBox(
+            drawWrappedTextNoShrink(
               ctx,
               val,
               cellX,
               curY,
               cw,
-              rowH,
-              40,
+              rh,
+              cellFontSize,
               '400',
               col.align,
-              26,
-              14
+              cellPadX,
+              cellLineH
             );
           }
           cellX += cw;
         });
       }
-      curY += rowH;
+      curY += rh;
     }
   });
 
@@ -891,106 +1100,118 @@ export async function renderKp7Page1(
   drawLine(ctx, ML, curY, ML + W, curY, 3);
 
   // =========================================================================
-  // BOTTOM SIGNATURE BLOCK (NO outer rectangle box — exact official PDF!)
+  // BOTTOM SIGNATURE BLOCK (NO outer box — W4.5 Slash-Free Date "1 พ.ย. 2569")
   // =========================================================================
-  const sigTop = curY + 58;
+  const sigTop = curY + 52;
   const leftCenterX = ML + 540;
   const rightCenterX = ML + W - 540;
 
-  // Left: Owner attestation + signature image + เจ้าของประวัติ
-  drawFittedText(
+  drawFixedText(
     ctx,
     'ขอรับรองว่าข้อมูลที่ข้าพเจ้ากรอกเป็นความจริงทุกประการ',
     leftCenterX,
     sigTop + 18,
-    1040,
     40,
     '400',
     'center',
-    30
+    'middle'
   );
 
-  // Owner signature image (CORS-safe via GAS getBase64 proxy first)
   if (options.includeOwnerSignature && person.signature_path) {
     const sigImg = await loadSignatureForCanvas(person.signature_path, options);
     if (sigImg) {
       const maxSigW = 420;
-      const maxSigH = 128;
+      const maxSigH = 124;
       const scale = Math.min(maxSigW / sigImg.naturalWidth, maxSigH / sigImg.naturalHeight, 1);
       const drawW = sigImg.naturalWidth * scale;
       const drawH = sigImg.naturalHeight * scale;
-      ctx.drawImage(sigImg, leftCenterX - drawW / 2 + 24, sigTop + 150 - drawH, drawW, drawH);
+      ctx.drawImage(sigImg, leftCenterX - drawW / 2 + 24, sigTop + 148 - drawH, drawW, drawH);
     }
   }
 
-  setFont(ctx, 42, '400');
-  ctx.fillStyle = INK;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('ลงชื่อ .................................................................', leftCenterX, sigTop + 168);
-  ctx.fillText('เจ้าของประวัติ', leftCenterX, sigTop + 236);
-  drawFittedText(
+  drawFixedText(
     ctx,
-    formatSlashDateKp7(options.ownerSignDateIso || options.certifyDateIso, useThai),
+    'ลงชื่อ .................................................................',
     leftCenterX,
-    sigTop + 306,
-    680,
+    sigTop + 166,
+    42,
+    '400',
+    'center',
+    'middle'
+  );
+  drawFixedText(ctx, 'เจ้าของประวัติ', leftCenterX, sigTop + 234, 42, '400', 'center', 'middle');
+  drawFixedText(
+    ctx,
+    formatSignatureDateKp7(options.ownerSignDateIso || options.certifyDateIso, useThai),
+    leftCenterX,
+    sigTop + 302,
     40,
     '400',
     'center',
-    30
+    'middle'
   );
 
   // Right: Head of Agency / Authorized Certifier
-  setFont(ctx, 42, '400');
-  ctx.fillStyle = INK;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('ลงชื่อ .................................................................', rightCenterX, sigTop + 116);
-
-  const certName = toThaiDigits(cleanDisplaySegment(options.certifierName), useThai);
-  if (certName) {
-    drawFittedText(ctx, `( ${certName} )`, rightCenterX, sigTop + 178, 920, 42, '400', 'center', 30);
-  } else {
-    ctx.fillText('( ................................................................. )', rightCenterX, sigTop + 178);
-  }
-
-  const certPos = toThaiDigits(cleanDisplaySegment(options.certifierPosition), useThai);
-  if (certPos) {
-    drawFittedText(ctx, `ตำแหน่ง ${certPos}`, rightCenterX, sigTop + 240, 960, 40, '400', 'center', 28);
-  } else {
-    ctx.fillText('ตำแหน่ง .................................................................', rightCenterX, sigTop + 240);
-  }
-
-  drawFittedText(
+  drawFixedText(
     ctx,
-    'หัวหน้าส่วนราชการหรือผู้ที่หัวหน้าส่วนราชการมอบหมาย',
+    'ลงชื่อ .................................................................',
     rightCenterX,
-    sigTop + 302,
-    1020,
-    38,
+    sigTop + 114,
+    42,
     '400',
     'center',
-    28
+    'middle'
   );
-  drawFittedText(
+
+  const certName = toThaiDigits(cleanDisplaySegment(options.certifierName), useThai);
+  drawFixedText(
     ctx,
-    formatSlashDateKp7(options.certifyDateIso, useThai),
+    certName ? `( ${certName} )` : '( ................................................................. )',
     rightCenterX,
-    sigTop + 362,
-    680,
+    sigTop + 176,
+    42,
+    '400',
+    'center',
+    'middle'
+  );
+
+  const certPos = toThaiDigits(cleanDisplaySegment(options.certifierPosition), useThai);
+  drawFixedText(
+    ctx,
+    certPos ? `ตำแหน่ง ${certPos}` : 'ตำแหน่ง .................................................................',
+    rightCenterX,
+    sigTop + 238,
     40,
     '400',
     'center',
-    30
+    'middle'
+  );
+
+  drawFixedText(
+    ctx,
+    'หัวหน้าส่วนราชการหรือผู้ที่หัวหน้าส่วนราชการมอบหมาย',
+    rightCenterX,
+    sigTop + 300,
+    38,
+    '400',
+    'center',
+    'middle'
+  );
+  drawFixedText(
+    ctx,
+    formatSignatureDateKp7(options.certifyDateIso, useThai),
+    rightCenterX,
+    sigTop + 358,
+    40,
+    '400',
+    'center',
+    'middle'
   );
 }
 
 /**
  * Renders Official KP.7 Page 2+ (Item 14: ตำแหน่งและเงินเดือน) at 300 DPI (2480 x 3508 px).
- * Strictly honors `แบบฟอร์ม กพ7.pdf` Page 2+:
- *  - Single top line outside border: ชื่อ........ กระทรวง........ กรม........ (NO footer!)
- *  - Crisp full-page 8-column table with white headers & multi-line ruled rows
+ * Implements W4.3 (rebalanced P2_COLS + dd/mm/yy date) and W4.4 (fixed 40px font, wrapped across all 8 columns).
  */
 export async function renderKp7Page2Plus(
   canvas: HTMLCanvasElement,
@@ -1009,13 +1230,10 @@ export async function renderKp7Page2Plus(
   const { person } = bundle;
   const useThai = options.useThaiNumerals;
 
-  // White A4 background
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, KP7_A4_WIDTH, KP7_A4_HEIGHT);
 
-  // =========================================================================
-  // TOP HEADER LINE OUTSIDE BORDER: ชื่อ....... กระทรวง....... กรม.......
-  // =========================================================================
+  // Top Header Line Outside Border: ชื่อ....... กระทรวง....... กรม.......
   const headerY = 160;
   const fullName = toThaiDigits(cleanDisplaySegment(person.full_name), useThai);
   const ministryVal = toThaiDigits(cleanDisplaySegment(options.ministryName), useThai);
@@ -1024,13 +1242,11 @@ export async function renderKp7Page2Plus(
     useThai
   );
 
-  drawLabeledDottedField(ctx, 'ชื่อ', fullName, ML, headerY, ML + 780, 44, 44);
-  drawLabeledDottedField(ctx, 'กระทรวง', ministryVal, ML + 805, headerY, ML + 1515, 44, 44);
-  drawLabeledDottedField(ctx, 'กรม', deptVal, ML + 1540, headerY, ML + W, 44, 44);
+  drawLabeledDottedFieldNoShrink(ctx, 'ชื่อ', fullName, ML, headerY, ML + 780, 42, 42);
+  drawLabeledDottedFieldNoShrink(ctx, 'กระทรวง', ministryVal, ML + 805, headerY, ML + 1515, 42, 42);
+  drawLabeledDottedFieldNoShrink(ctx, 'กรม', deptVal, ML + 1540, headerY, ML + W, 42, 42);
 
-  // =========================================================================
-  // ITEM 14 FULL-PAGE 8-COLUMN TABLE
-  // =========================================================================
+  // Item 14 Full-Page 8-Column Table
   const tableTop = 198;
   const tableBottom = 3380;
   const titleH = 74;
@@ -1038,22 +1254,25 @@ export async function renderKp7Page2Plus(
   const bodyTop = tableTop + titleH + colHeadH;
   const rowH = (tableBottom - bodyTop) / linesPerPage;
 
-  // Outer border
   ctx.strokeStyle = LINE_DARK;
   ctx.lineWidth = 3;
   ctx.strokeRect(ML, tableTop, W, tableBottom - tableTop);
 
-  // Row 0: Centered title "๑๔. ตำแหน่งและเงินเดือน"
-  setFont(ctx, 48, '700');
-  ctx.fillStyle = INK;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(`${toThaiDigits('14', useThai)}. ตำแหน่งและเงินเดือน`, ML + W / 2, tableTop + titleH / 2 + 2);
+  // Row 0: Centered bold title
+  drawFixedText(
+    ctx,
+    `${toThaiDigits('14', useThai)}. ตำแหน่งและเงินเดือน`,
+    ML + W / 2,
+    tableTop + titleH / 2 + 2,
+    48,
+    '700',
+    'center',
+    'middle'
+  );
 
-  // Divider below title
   drawLine(ctx, ML, tableTop + titleH, ML + W, tableTop + titleH, 2.5);
 
-  // Column headers & full-height vertical dividers
+  // Column headers & full-height vertical dividers (fixed 38px bold, wrapped, never shrunk!)
   let colX = ML;
   const colPositions: number[] = [];
   P2_COLS.forEach((col, idx) => {
@@ -1063,42 +1282,15 @@ export async function renderKp7Page2Plus(
     }
 
     const headY = tableTop + titleH;
-    if (col.label.length === 1) {
-      drawFittedText(
-        ctx,
-        col.label[0],
-        colX + col.width / 2,
-        headY + colHeadH / 2,
-        col.width - 14,
-        42,
-        '700',
-        'center',
-        30
-      );
-    } else {
-      const lGap = 44;
-      const startY = headY + colHeadH / 2 - ((col.label.length - 1) * lGap) / 2;
-      col.label.forEach((lbl, li) => {
-        drawFittedText(
-          ctx,
-          lbl,
-          colX + col.width / 2,
-          startY + li * lGap,
-          col.width - 14,
-          40,
-          '700',
-          'center',
-          28
-        );
-      });
-    }
+    const headText = col.label.join('\n');
+    drawWrappedTextNoShrink(ctx, headText, colX, headY, col.width, colHeadH, 38, '700', 'center', 8, 44);
     colX += col.width;
   });
 
-  // Divider below column headers
   drawLine(ctx, ML, bodyTop, ML + W, bodyTop, 2.5);
 
-  // Render ruled rows (linesPerPage rows filling full A4 page cleanly)
+  // Render ruled rows at FIXED 40px Sarabun (lines already wrapped to column widths!)
+  const padX = 12;
   for (let i = 0; i < linesPerPage; i += 1) {
     const ry = bodyTop + i * rowH;
     if (i > 0) {
@@ -1124,24 +1316,13 @@ export async function renderKp7Page2Plus(
       const val = cellValues[cIdx];
       if (!val) return;
       const cx = colPositions[cIdx];
-      const pad = 14;
       const anchorX =
         col.align === 'center'
           ? cx + col.width / 2
           : col.align === 'right'
-            ? cx + col.width - pad
-            : cx + pad;
-      drawFittedText(
-        ctx,
-        val,
-        anchorX,
-        midY,
-        col.width - pad * 2,
-        42,
-        '400',
-        col.align,
-        26
-      );
+            ? cx + col.width - padX
+            : cx + padX;
+      drawFixedText(ctx, val, anchorX, midY, 40, '400', col.align, 'middle');
     });
   }
 }

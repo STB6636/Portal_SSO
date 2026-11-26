@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '@/services/authService';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -11,6 +11,9 @@ import { DriveImage } from '@/components/common/DriveImage';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const initialized = useAuthStore((s) => s.initialized);
+  const systemHasUsers = useAuthStore((s) => s.systemHasUsers);
+  const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const { settings } = useSettings();
   const { isDark, toggleTheme } = useTheme();
@@ -20,6 +23,17 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!initialized || submitting) return;
+    if (systemHasUsers === false) {
+      navigate('/setup', { replace: true });
+    } else if (user?.must_change_credential) {
+      navigate('/force-change-credential', { replace: true });
+    } else if (user) {
+      navigate('/main-app', { replace: true });
+    }
+  }, [initialized, systemHasUsers, user, submitting, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +49,7 @@ export default function LoginPage() {
       if (profile.must_change_credential) {
         navigate('/force-change-credential', { replace: true });
       } else {
-        navigate('/apps', { replace: true });
+        navigate('/main-app', { replace: true });
       }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'เข้าสู่ระบบไม่สำเร็จ', 'error');

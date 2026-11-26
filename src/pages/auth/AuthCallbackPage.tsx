@@ -20,7 +20,7 @@ export default function AuthCallbackPage() {
       if (!active) return;
       if (profile) {
         setUser(profile);
-        navigate(profile.must_change_credential ? '/force-change-credential' : '/apps', { replace: true });
+        navigate(profile.must_change_credential ? '/force-change-credential' : '/main-app', { replace: true });
       } else {
         navigate('/login', { replace: true });
       }

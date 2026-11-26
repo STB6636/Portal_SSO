@@ -6,7 +6,12 @@ import type {
   PersonnelDirectoryItem,
   PersonnelTimelinesBundle,
 } from '@/types/domain.types';
-import type { Kp7CareerTableRow, Kp7Item1NameFields, Kp7VisualCareerLine } from './kp7Types';
+import type {
+  Kp7CareerTableRow,
+  Kp7CareerWrapCol,
+  Kp7Item1NameFields,
+  Kp7VisualCareerLine,
+} from './kp7Types';
 
 const THAI_DIGITS = ['๐', '๑', '๒', '๓', '๔', '๕', '๖', '๗', '๘', '๙'];
 
@@ -104,9 +109,6 @@ export function parseIsoYmd(isoDate: string | null | undefined): { y: number; m:
 /**
  * Formats an ISO date into formal KP.7 Thai full date + parenthetical Thai word spelling
  * Per official KP.7 manual (นร ๑๐๐๖/ว ๒๓ p.6): parenthetical Thai words have NO spaces!
- * e.g. 1990-05-21 ->
- *   numericText: "๒๑ พฤษภาคม ๒๕๓๓"
- *   wordsText: "ยี่สิบเอ็ดพฤษภาคมสองพันห้าร้อยสามสิบสาม"
  */
 export function formatThaiDateInWords(
   isoDate: string | null | undefined,
@@ -149,6 +151,36 @@ export function formatThaiShortDateKp7(
   return toThaiDigits(`${parts.d} ${monthShort} ${yearBe}`, useThai);
 }
 
+/**
+ * W4.3: Numeric short date dd/mm/yy (2-digit BE year) for KP.7 Item 14 Column 1
+ * Honors Checkpoint C2-A: respects `useThai` switch ("01/02/69" or "๐๑/๐๒/๖๙")
+ */
+export function formatShortNumericDateKp7(
+  isoDate: string | null | undefined,
+  useThai = true
+): string {
+  const parts = parseIsoYmd(isoDate);
+  if (!parts) return '';
+  const yearBe = parts.y >= 2400 ? parts.y : parts.y + 543;
+  const dd = String(parts.d).padStart(2, '0');
+  const mm = String(parts.m).padStart(2, '0');
+  const yy = String(yearBe % 100).padStart(2, '0');
+  return toThaiDigits(`${dd}/${mm}/${yy}`, useThai);
+}
+
+/**
+ * W4.5: Slash-free signature date for Page 1 bottom (Owner & Head of Agency)
+ * e.g. "1 พ.ย. 2569" / "๑ พ.ย. ๒๕๖๙", blank fallback without slashes
+ */
+export function formatSignatureDateKp7(
+  isoDate: string | null | undefined,
+  useThai = true
+): string {
+  const formatted = formatThaiShortDateKp7(isoDate, useThai);
+  if (!formatted) return '.......... .............. ..........';
+  return formatted;
+}
+
 export function formatThaiYearBeOnly(
   isoDate: string | null | undefined,
   useThai = true
@@ -159,6 +191,7 @@ export function formatThaiYearBeOnly(
   return toThaiDigits(yearBe, useThai);
 }
 
+/** @deprecated Prefer `formatSignatureDateKp7` (slash-free) for KP.7 Page 1 signatures */
 export function formatSlashDateKp7(
   isoDate: string | null | undefined,
   useThai = true
@@ -201,7 +234,7 @@ export function splitCid13Slots(
  * Formats official KP.7 Item 1 (คำนำหน้านาม, ๑. ชื่อ, นามสกุล) per นร ๑๐๐๖/ว ๒๓:
  *  - Includes `noble_or_rank_title` alongside current `prefix_name`
  *  - Appends distinct historical prefixes / first names / last names in parentheses
- *    ordered oldest -> newest (e.g. "นาง (นางสาว)", "สมชาย (สมศักดิ์)")
+ *    ordered oldest -> newest
  */
 export function buildKp7Item1NameFields(
   person: Pick<
@@ -217,7 +250,6 @@ export function buildKp7Item1NameFields(
   const currentFirst = cleanDisplaySegment(person.first_name);
   const currentLast = cleanDisplaySegment(person.last_name);
 
-  // Chronological oldest -> newest
   const sorted = [...nameHistory].sort((a, b) => {
     const dCmp = String(a.changed_date || '').localeCompare(String(b.changed_date || ''));
     if (dCmp !== 0) return dCmp;
@@ -311,9 +343,7 @@ function isMeaningfulOrgSegment(val?: string | null): string {
 
 /**
  * Builds KP.7 Item 14 rows STRICTLY from `timelines.positionHistory` ONLY (C6-A confirmed).
- * Does NOT merge `timelines.salaryHistory`.
- * Ordered oldest -> newest (`effective_date ASC`, tie-break `sort_order DESC`).
- * When `positionHistory` is empty, returns `[]` by default (C3-A) unless `allowCurrentPositionFallback` is true.
+ * Uses `formatShortNumericDateKp7` ("01/02/69" / "๐๑/๐๒/๖๙") for Column 1 dateLabel (W4.3).
  */
 export function buildKp7CareerRows(
   person: PersonnelDirectoryItem,
@@ -329,7 +359,6 @@ export function buildKp7CareerRows(
   const sortedPositions = [...(timelines.positionHistory ?? [])].sort((a, b) => {
     const dCmp = String(a.effective_date || '').localeCompare(String(b.effective_date || ''));
     if (dCmp !== 0) return dCmp;
-    // UI keeps newest at sort_order = 1 and oldest at largest sort_order -> oldest first means higher sort_order first
     const sa = Number(a.sort_order ?? 0);
     const sb = Number(b.sort_order ?? 0);
     if (sa !== sb) return sb - sa;
@@ -355,7 +384,7 @@ export function buildKp7CareerRows(
     return [
       {
         effectiveDateIso: person.current_position_date || person.start_service_date || '',
-        dateLabel: formatThaiShortDateKp7(person.current_position_date || person.start_service_date, useThai),
+        dateLabel: formatShortNumericDateKp7(person.current_position_date || person.start_service_date, useThai),
         positionLabel: positionLines.join(' '),
         positionLines,
         positionNumber: toThaiDigits(cleanDisplaySegment(person.position_number), useThai),
@@ -383,7 +412,6 @@ export function buildKp7CareerRows(
     const ancestors = resolveOrgUnitAncestors(ph.org_unit_id, master.orgUnits);
 
     const basePosTitle = cleanDisplaySegment(pos?.name_th || ph.position_title_snapshot) || '-';
-    // Official KP.7 Item 14 convention: line 1 = position title, lines 2..k = org units smallest -> largest
     const orgLines = [
       isMeaningfulOrgSegment(ancestors.divisionName),
       isMeaningfulOrgSegment(ancestors.departmentName),
@@ -402,7 +430,7 @@ export function buildKp7CareerRows(
 
     return {
       effectiveDateIso: ph.effective_date || '',
-      dateLabel: formatThaiShortDateKp7(ph.effective_date, useThai),
+      dateLabel: formatShortNumericDateKp7(ph.effective_date, useThai),
       positionLabel: positionLines.join(' '),
       positionLines,
       positionNumber: toThaiDigits(cleanDisplaySegment(ph.position_number), useThai),
@@ -418,38 +446,64 @@ export function buildKp7CareerRows(
 }
 
 /**
- * Expands multi-line career entries into individual visual ruled lines and paginates them
- * across Page 2, Page 3, Page 4+ without splitting short entries across page breaks.
+ * Expands multi-line career entries into individual visual ruled lines across ALL 8 columns
+ * (W4.4 no-shrink wrapping) and paginates cleanly across Page 2, Page 3, Page 4+.
  */
 export function expandAndPaginateCareerLines(
   rows: Kp7CareerTableRow[],
   linesPerPage = 32,
-  wrapHelper?: (text: string, maxCols: 'position' | 'level' | 'orderRef') => string[]
+  wrapHelper?: (text: string, col: Kp7CareerWrapCol) => string[]
 ): Kp7VisualCareerLine[][] {
   if (rows.length === 0) return [[]];
 
+  const wrapSingle = (text: string, col: Kp7CareerWrapCol): string[] => {
+    const clean = String(text ?? '').trim();
+    if (!clean) return [];
+    return wrapHelper ? wrapHelper(clean, col) : [clean];
+  };
+
   const entries: Kp7VisualCareerLine[][] = rows.map((r) => {
+    const dateLines = wrapSingle(r.dateLabel, 'date');
     const posLines = (r.positionLines.length > 0 ? r.positionLines : [r.positionLabel]).flatMap((seg) =>
-      wrapHelper ? wrapHelper(seg, 'position') : [seg]
+      wrapSingle(seg, 'position')
     );
-    const lvlLines = (r.levelLines.length > 0 ? r.levelLines : [r.positionLevelLabel]).flatMap((seg) =>
-      wrapHelper ? wrapHelper(seg, 'level') : [seg]
-    );
+    const posNoLines = wrapSingle(r.positionNumber, 'posNo');
+    const posTypeLines = wrapSingle(r.positionTypeLabel, 'posType');
+    // When canvas wrapHelper is provided, measure actual full level label against widened Col 5 (245px)
+    // so "ชำนาญการพิเศษ" stays on 1 line if it fits; keep splitLongLevelName only as non-DOM fallback
+    const lvlLines = wrapHelper
+      ? wrapSingle(r.positionLevelLabel, 'level')
+      : r.levelLines.length > 0
+        ? r.levelLines.filter(Boolean)
+        : wrapSingle(r.positionLevelLabel, 'level');
+    const salLines = wrapSingle(r.salaryLabel, 'salary');
+    const alwLines = wrapSingle(r.allowanceLabel, 'allowance');
     const refLines = (r.orderRefLines.length > 0 ? r.orderRefLines : r.orderRef ? [r.orderRef] : []).flatMap(
-      (seg) => (wrapHelper ? wrapHelper(seg, 'orderRef') : [seg])
+      (seg) => wrapSingle(seg, 'orderRef')
     );
 
-    const lineCount = Math.max(1, posLines.length, lvlLines.length, refLines.length);
+    const lineCount = Math.max(
+      1,
+      dateLines.length,
+      posLines.length,
+      posNoLines.length,
+      posTypeLines.length,
+      lvlLines.length,
+      salLines.length,
+      alwLines.length,
+      refLines.length
+    );
+
     const lines: Kp7VisualCareerLine[] = [];
     for (let i = 0; i < lineCount; i += 1) {
       lines.push({
-        dateLabel: i === 0 ? r.dateLabel : '',
+        dateLabel: dateLines[i] ?? '',
         positionLine: posLines[i] ?? '',
-        positionNumber: i === 0 ? r.positionNumber : '',
-        positionTypeLabel: i === 0 ? r.positionTypeLabel : '',
+        positionNumber: posNoLines[i] ?? '',
+        positionTypeLabel: posTypeLines[i] ?? '',
         levelLine: lvlLines[i] ?? '',
-        salaryLabel: i === 0 ? r.salaryLabel : '',
-        allowanceLabel: i === 0 ? r.allowanceLabel : '',
+        salaryLabel: salLines[i] ?? '',
+        allowanceLabel: alwLines[i] ?? '',
         orderRefLine: refLines[i] ?? '',
         isEntryStart: i === 0,
       });
