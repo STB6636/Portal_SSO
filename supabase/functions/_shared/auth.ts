@@ -1,12 +1,50 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
+export interface AuthenticatedAdminScope {
+  scope_level_no: 2 | 3;
+  org_unit_id: string;
+  org_unit_name?: string | null;
+  parent_office_id?: string | null;
+}
+
 export interface AuthenticatedActor {
   id: string;
   role: 'SUPERADMIN' | 'ADMIN' | 'USER';
   status: string;
   personnel_id: string | null;
   must_change_credential: boolean;
-  admin_scope: { scope_level_no: 2 | 3; org_unit_id: string } | null;
+  admin_scope: AuthenticatedAdminScope | null;
+}
+
+export async function resolveUserAdminScope(
+  adminClient: SupabaseClient,
+  userId: string,
+  role: string
+): Promise<AuthenticatedAdminScope | null> {
+  if (role !== 'ADMIN') return null;
+  const { data: sc } = await adminClient
+    .from('user_admin_scopes')
+    .select('scope_level_no, org_unit_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (!sc) return null;
+
+  const { data: ou } = await adminClient
+    .from('org_units')
+    .select('name_th, parent_id')
+    .eq('id', sc.org_unit_id)
+    .maybeSingle();
+
+  const levelNo = sc.scope_level_no as 2 | 3;
+  return {
+    scope_level_no: levelNo,
+    org_unit_id: sc.org_unit_id as string,
+    org_unit_name: (ou?.name_th as string | null) ?? null,
+    parent_office_id:
+      levelNo === 2
+        ? (sc.org_unit_id as string)
+        : ((ou?.parent_id as string | null) ?? null),
+  };
 }
 
 export function createAdminClient(): SupabaseClient {
@@ -38,20 +76,7 @@ export async function requireAuthenticatedActor(
 
   if (!u || u.status !== 'ACTIVE') return null;
 
-  let adminScope: AuthenticatedActor['admin_scope'] = null;
-  if (u.role === 'ADMIN') {
-    const { data: sc } = await adminClient
-      .from('user_admin_scopes')
-      .select('scope_level_no, org_unit_id')
-      .eq('user_id', u.id)
-      .maybeSingle();
-    if (sc) {
-      adminScope = {
-        scope_level_no: sc.scope_level_no as 2 | 3,
-        org_unit_id: sc.org_unit_id as string,
-      };
-    }
-  }
+  const adminScope = await resolveUserAdminScope(adminClient, u.id, u.role);
 
   return {
     id: u.id,

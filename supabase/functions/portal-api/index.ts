@@ -2,6 +2,7 @@ import { handleCorsPreflight, jsonResponse } from '../_shared/cors.ts';
 import {
   createAdminClient,
   requireAuthenticatedActor,
+  resolveUserAdminScope,
   type AuthenticatedActor,
 } from '../_shared/auth.ts';
 import { sha256Hex } from '../_shared/crypto.ts';
@@ -15,6 +16,26 @@ interface ResolvedWebapp {
 }
 
 type AdminClient = ReturnType<typeof createAdminClient>;
+
+async function getActiveAppHierarchyLevel(
+  admin: AdminClient,
+  actor: AuthenticatedActor | null,
+  webappId: string
+): Promise<number> {
+  if (!actor) return 0;
+  if (actor.role === 'SUPERADMIN') return 99;
+  const { data: perm } = await admin
+    .from('user_app_permissions')
+    .select('is_allowed, expires_at, webapp_roles(hierarchy_level, is_active)')
+    .eq('user_id', actor.id)
+    .eq('webapp_id', webappId)
+    .maybeSingle();
+  if (!perm?.is_allowed) return 0;
+  if (perm.expires_at && new Date(perm.expires_at).getTime() <= Date.now()) return 0;
+  const roleObj = Array.isArray(perm.webapp_roles) ? perm.webapp_roles[0] : perm.webapp_roles;
+  if (!roleObj || roleObj.is_active === false) return 0;
+  return Number(roleObj.hierarchy_level ?? 0);
+}
 
 async function hasActiveAppPermission(
   admin: AdminClient,
@@ -204,7 +225,7 @@ Deno.serve(async (req: Request) => {
   try {
     // 1. GET /health
     if (req.method === 'GET' && (route === '/health' || route === '/')) {
-      return jsonResponse({ success: true, service: 'portal-api', version: '2.4.0', timestamp: new Date().toISOString() });
+      return jsonResponse({ success: true, service: 'portal-api', version: '2.5.0', timestamp: new Date().toISOString() });
     }
 
     const app = await authenticateWebapp(req, admin);
@@ -239,10 +260,20 @@ Deno.serve(async (req: Request) => {
 
       await admin.from('security_tokens').update({ used_at: new Date().toISOString() }).eq('id', tok.id);
 
-      const { data: u } = await admin.from('users').select('id, username, email, auth_email, role, personnel_id').eq('id', tok.user_id).single();
-      const { data: person } = u?.personnel_id
-        ? await admin.from('v_personnel_directory').select('*').eq('id', u.personnel_id).maybeSingle()
-        : { data: null };
+      const { data: u } = await admin
+        .from('users')
+        .select('id, username, email, auth_email, role, status, personnel_id, must_change_credential')
+        .eq('id', tok.user_id)
+        .single();
+      const [personRes, adminScope] = await Promise.all([
+        u?.personnel_id
+          ? admin.from('v_personnel_directory').select('*').eq('id', u.personnel_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        u?.id && u?.role
+          ? resolveUserAdminScope(admin, u.id, u.role)
+          : Promise.resolve(null),
+      ]);
+      const person = personRes.data;
 
       let otpHash: string | null = null;
       if (route === '/sso/exchange' && u?.auth_email) {
@@ -252,7 +283,16 @@ Deno.serve(async (req: Request) => {
 
       return jsonResponse({
         success: true,
-        user: { id: u?.id, username: u?.username, email: u?.email, role: u?.role },
+        user: {
+          id: u?.id,
+          username: u?.username,
+          email: u?.email,
+          role: u?.role,
+          status: u?.status,
+          personnel_id: u?.personnel_id ?? null,
+          must_change_credential: Boolean(u?.must_change_credential),
+          admin_scope: adminScope,
+        },
         personnel: sanitizePersonnelByScopes(person as Record<string, unknown> | null, app.scopes),
         app_permission: tok.payload?.app_permission ?? null,
         ...(route === '/sso/exchange' ? { otp_hash: otpHash } : {}),
@@ -466,10 +506,38 @@ Deno.serve(async (req: Request) => {
       const { actor, errorResponse } = await resolveModeBActor(req, admin, app, true);
       if (errorResponse) return errorResponse;
       let q = admin.from('v_personnel_directory').select('*');
-      const scoped = applyActorScopeToQuery(q, actor, 'id');
-      if (scoped.empty) return jsonResponse({ success: true, data: [] });
-      q = scoped.query;
-      const { data } = await q.limit(500);
+      const officeId = url.searchParams.get('office_id')?.trim();
+      const deptId = url.searchParams.get('department_id')?.trim();
+      const divId = url.searchParams.get('division_id')?.trim();
+      const activeOnly = url.searchParams.get('active_only') === 'true';
+      if (officeId) q = q.eq('office_id', officeId);
+      if (deptId) q = q.eq('department_id', deptId);
+      if (divId) q = q.eq('division_id', divId);
+      if (activeOnly) q = q.eq('allows_account_provision', true);
+
+      const appLevel = await getActiveAppHierarchyLevel(admin, actor, app.id);
+      if (appLevel < 90) {
+        const scoped = applyActorScopeToQuery(q, actor, 'id');
+        if (scoped.empty) return jsonResponse({ success: true, data: [] });
+        q = scoped.query;
+      }
+
+      const rawLimit = Number(url.searchParams.get('limit') || 0);
+      const hasOrgFilter = Boolean(officeId || deptId || divId);
+      const effectiveLimit =
+        Number.isFinite(rawLimit) && rawLimit > 0
+          ? Math.min(2000, Math.max(1, Math.floor(rawLimit)))
+          : hasOrgFilter
+            ? 2000
+            : 1000;
+
+      const { data, error } = await q
+        .order('first_name', { ascending: true })
+        .order('last_name', { ascending: true })
+        .limit(effectiveLimit);
+      if (error) {
+        return jsonResponse({ success: false, message: error.message }, 500);
+      }
       const mapped = (data ?? []).map((row: Record<string, unknown>) =>
         sanitizePersonnelByScopes(row, app.scopes)
       );
